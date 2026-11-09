@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Drone Sim</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/node_modules/cesium/Build/Cesium/Widgets/widgets.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <script>window.CESIUM_BASE_URL = '/node_modules/cesium/Build/Cesium/';</script>
+  <script src="/node_modules/cesium/Build/Cesium/Cesium.js"></script>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+
+  <div id="ui">
+    <!-- MAIN MENU -->
+    <section id="screen-menu" class="screen center">
+      <div class="menu-card">
+        <svg class="logo-drone" viewBox="0 0 120 60" aria-hidden="true">
+          <g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round">
+            <path d="M30 30 L90 30" /><path d="M42 22 L78 38" /><path d="M78 22 L42 38" />
+          </g>
+          <rect x="48" y="24" width="24" height="12" rx="4" fill="#ff8a3d" />
+          <g fill="#35d0ff"><ellipse cx="22" cy="18" rx="16" ry="4" /><ellipse cx="98" cy="18" rx="16" ry="4" /></g>
+        </svg>
+        <h1>DRONE <span>SIM</span></h1>
+        <p class="tagline">Deliver. Earn. Upgrade. Fly over the whole Earth.</p>
+        <div class="btn-col">
+          <button class="btn big primary" data-action="play">▶ Play</button>
+          <button class="btn big" data-action="settings">⚙ Settings</button>
+          <button class="btn big danger" data-action="quit">✕ Quit</button>
+        </div>
+        <div id="world-status" class="chip"></div>
+      </div>
+    </section>
+
+    <!-- HUB -->
+    <section id="screen-hub" class="screen hidden">
+      <header class="hub-top">
+        <button class="btn small" data-action="menu">← Menu</button>
+        <div class="hub-title">DRONE SIM</div>
+        <div class="hub-stats">
+          <div class="pill money" id="hub-money">$0</div>
+          <div class="pill" id="hub-drone">Sparrow Mini</div>
+        </div>
+      </header>
+      <nav class="tabs">
+        <button class="tab" data-tab="jobs">💼 Jobs</button>
+        <button class="tab" data-tab="drones">🚁 Drones</button>
+        <button class="tab" data-tab="world">🌍 World</button>
+      </nav>
+      <main class="hub-body">
+        <div id="tab-jobs" class="tabpane"></div>
+        <div id="tab-drones" class="tabpane hidden"></div>
+        <div id="tab-world" class="tabpane hidden"></div>
+      </main>
+      <footer class="hub-foot">
+        <span id="hub-place" class="muted"></span>
+        <button class="btn" data-action="freefly">🕊 Free Fly</button>
+      </footer>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="screen-settings" class="screen center hidden">
+      <div class="panel wide">
+        <h2>Settings</h2>
+        <div class="field">
+          <label for="set-google">Google Maps API key <small>(turns on the real 3D Earth)</small></label>
+          <input id="set-google" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key here" />
+          <small class="muted">Needs the <b>Map Tiles API</b> enabled in Google Cloud. Stored only on this computer.</small>
+        </div>
+        <div class="field">
+          <label for="set-ion">Cesium ion token <small>(optional, free 3D buildings + terrain)</small></label>
+          <input id="set-ion" type="password" autocomplete="off" spellcheck="false" placeholder="Optional" />
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="set-quality">Graphics quality</label>
+            <select id="set-quality"><option value="high">High</option><option value="medium">Medium</option><option value="low">Low (faster)</option></select>
+          </div>
+          <div class="field">
+            <label for="set-units">Speed units</label>
+            <select id="set-units"><option value="kmh">km/h</option><option value="ms">m/s</option></select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="set-volume">Volume</label>
+            <input id="set-volume" type="range" min="0" max="1" step="0.05" />
+          </div>
+          <div class="field">
+            <label for="set-collide">Crash into buildings</label>
+            <select id="set-collide"><option value="on">On</option><option value="off">Off</option></select>
+          </div>
+        </div>
+        <p id="settings-note" class="muted"></p>
+        <div class="btn-row">
+          <button class="btn primary" data-action="save-settings">Save</button>
+          <button class="btn" data-action="close-settings">Back</button>
+          <button class="btn danger small" data-action="reset-save">Reset progress</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- LOADING -->
+    <section id="screen-loading" class="screen center hidden">
+      <div class="panel">
+        <div class="spinner"></div>
+        <h2 id="loading-text">Loading the world…</h2>
+      </div>
+    </section>
+
+    <!-- HUD -->
+    <section id="hud" class="hidden">
+      <div class="hud-tl">
+        <div class="pill money" id="hud-money">$0</div>
+        <div class="pill" id="hud-timer">⏱ 0:00</div>
+      </div>
+      <div class="hud-top" id="hud-job">
+        <div class="job-title" id="hud-job-title"></div>
+        <div class="job-goal" id="hud-job-goal"></div>
+        <div class="route">
+          <span class="route-end" id="route-a">●</span>
+          <div class="route-line"><div class="route-fill" id="route-fill"></div><div class="route-drone" id="route-drone">▲</div></div>
+          <span class="route-end" id="route-b">●</span>
+        </div>
+        <div class="route-labels"><span id="route-a-label"></span><span id="route-b-label"></span></div>
+      </div>
+      <div class="hud-bl">
+        <div class="gauge"><b id="g-speed">0</b><small id="g-speed-unit">km/h</small></div>
+        <div class="gauge"><b id="g-alt">0</b><small>m up</small></div>
+        <div class="gauge"><b id="g-head">N</b><small id="g-head-deg">0°</small></div>
+        <div class="battery"><div class="battery-fill" id="g-batt"></div><span id="g-batt-text">100%</span></div>
+      </div>
+      <div class="hud-br" id="hud-help">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</div>
+        <div><kbd>Q</kbd><kbd>E</kbd> turn &nbsp; <kbd>Space</kbd> up &nbsp; <kbd>Shift</kbd> down</div>
+        <div><kbd>V</kbd> camera &nbsp; <kbd>Esc</kbd> pause</div>
+      </div>
+      <div id="marker" class="marker hidden"><div class="marker-icon" id="marker-icon">📍</div><div class="marker-dist" id="marker-dist"></div></div>
+      <div id="flash" class="flash"></div>
+    </section>
+
+    <!-- PAUSE -->
+    <section id="screen-pause" class="screen center hidden">
+      <div class="panel">
+        <h2>Paused</h2>
+        <div class="btn-col">
+          <button class="btn big primary" data-action="resume">▶ Resume</button>
+          <button class="btn big" data-action="abort">↩ Back to hub</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section id="screen-result" class="screen center hidden">
+      <div class="panel" id="result-panel"></div>
+    </section>
+
+    <div id="toasts"></div>
+  </div>
+
+  <script type="module" src="/js/game.js"></script>
+</body>
+</html>

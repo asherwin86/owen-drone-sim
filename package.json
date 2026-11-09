@@ -1,0 +1,20 @@
+{
+  "name": "owen-drone-sim",
+  "version": "1.0.0",
+  "description": "Drone delivery sim on the whole Earth (Electron + CesiumJS)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cesium": "^1.147.0"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3"
+  }
+}
