@@ -4,6 +4,7 @@ import { World } from './world.js';
 import { Flight, Input } from './flight.js';
 import { createDroneModel } from './droneModel.js';
 import { Sfx } from './audio.js';
+import { PadNav } from './gamepad.js';
 import { destination, distanceM, bearingRad, clamp, formatDist, formatMoney, formatTime } from './geo.js';
 
 const Cesium = window.Cesium;
@@ -62,13 +63,30 @@ function persist() {
   }, 150);
 }
 
+// Landmarks are teleport targets: start 160 m beside them (not inside the building).
+function landmarkSpawn(l) {
+  return destination(l.lat, l.lon, (200 * Math.PI) / 180, 160);
+}
+
 function mergeSave(s) {
   const base = JSON.parse(JSON.stringify(DEFAULT_SAVE));
+  const lm = LANDMARKS[0];
+  const sp = landmarkSpawn(lm);
+  base.lat = sp.lat;
+  base.lon = sp.lon;
   if (!s || typeof s !== 'object') return base;
   const m = { ...base, ...s, stats: { ...base.stats, ...(s.stats || {}) }, settings: { ...base.settings, ...(s.settings || {}) } };
   if (!Array.isArray(m.owned) || !m.owned.includes('sparrow')) m.owned = ['sparrow', ...(m.owned || [])];
   if (!DRONES.find((d) => d.id === m.drone)) m.drone = 'sparrow';
   if (!Number.isFinite(m.lat) || !Number.isFinite(m.lon)) { m.lat = base.lat; m.lon = base.lon; }
+  // Older saves may sit exactly on a landmark's centre (inside it): move them beside it.
+  for (const l of LANDMARKS) {
+    if (Math.abs(m.lat - l.lat) < 1e-5 && Math.abs(m.lon - l.lon) < 1e-5) {
+      const p = landmarkSpawn(l);
+      m.lat = p.lat;
+      m.lon = p.lon;
+    }
+  }
   return m;
 }
 
@@ -77,10 +95,12 @@ const SCREENS = ['menu', 'hub', 'settings', 'loading', 'pause', 'result'];
 function showScreen(name) {
   for (const s of SCREENS) $('#screen-' + s).classList.toggle('hidden', s !== name);
   $('#hud').classList.toggle('hidden', !(state.mode === 'flying' || state.mode === 'paused'));
+  document.body.classList.toggle('flying', state.mode === 'flying');
 }
 
 function setMode(mode, screen) {
   state.mode = mode;
+  state.input.clearPresses(); // don't carry old button presses into the next screen
   state.input.capture = mode === 'flying';
   showScreen(screen || (mode === 'flying' ? '' : mode));
 }
@@ -308,7 +328,7 @@ function renderWorldTab() {
   root.append(el('h3', {}, 'Famous places'));
   const grid = el('div', { class: 'worldgrid' });
   for (const l of LANDMARKS) {
-    grid.append(el('button', { class: 'worldcard', onclick: () => goTo(l.lat, l.lon, l.name) }, el('b', {}, l.name), el('span', {}, l.place)));
+    grid.append(el('button', { class: 'worldcard', onclick: () => { const p = landmarkSpawn(l); goTo(p.lat, p.lon, l.name); } }, el('b', {}, l.name), el('span', {}, l.place)));
   }
   root.append(grid);
 }
@@ -323,31 +343,93 @@ function openSettings(from) {
   $('#set-units').value = s.units;
   $('#set-volume').value = s.volume;
   $('#set-collide').value = s.collisions ? 'on' : 'off';
+  $('#set-rumble').value = s.rumble === false ? 'off' : 'on';
   $('#settings-note').replaceChildren();
   setMode('settings');
 }
 
 async function saveSettings() {
   const s = state.save.settings;
-  const newCfg = { googleMapsApiKey: $('#set-google').value.trim(), cesiumIonToken: $('#set-ion').value.trim() };
+  const newCfg = fixSwappedKeys({ googleMapsApiKey: $('#set-google').value.trim(), cesiumIonToken: $('#set-ion').value.trim() });
+  $('#set-google').value = newCfg.googleMapsApiKey;
+  $('#set-ion').value = newCfg.cesiumIonToken;
   const keyChanged = newCfg.googleMapsApiKey !== (state.cfg.googleMapsApiKey || '') || newCfg.cesiumIonToken !== (state.cfg.cesiumIonToken || '');
   s.quality = $('#set-quality').value;
   s.units = $('#set-units').value;
   s.volume = parseFloat($('#set-volume').value);
   s.collisions = $('#set-collide').value === 'on';
+  s.rumble = $('#set-rumble').value === 'on';
+  state.input.rumbleOn = s.rumble;
   state.sfx.setVolume(s.volume);
   state.world.applyQuality(s.quality);
   persist();
   const note = $('#settings-note');
   note.replaceChildren();
+  note.style.color = '';
   if (keyChanged) {
-    await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCfg) });
-    state.cfg = { ...state.cfg, ...newCfg };
-    note.append('Saved! Restart the game to load the new map. ', el('button', { class: 'btn small', onclick: () => location.reload() }, 'Restart now'));
+    try {
+      const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCfg) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.ok === false) throw new Error(j.error || 'HTTP ' + r.status);
+      state.cfg = { ...state.cfg, ...newCfg };
+      note.append('Saved! Restart the game to load the new map. ', el('button', { class: 'btn small', onclick: () => location.reload() }, 'Restart now'));
+    } catch (e) {
+      note.style.color = 'var(--red)';
+      const offline = e instanceof TypeError;
+      note.append(offline
+        ? '⚠ Could not save: the game server is not running. Start the game again (start-game.bat, or "npm run web"), then reload this page and try again.'
+        : '⚠ Could not save the keys: ' + e.message);
+    }
   } else {
     note.append('Saved!');
   }
   state.sfx.click();
+}
+
+async function testGoogleKey(key) {
+  if (key.startsWith('eyJ')) return { ok: false, msg: 'Google: that looks like a Cesium ion token. Paste it in the Cesium ion box instead.' };
+  try {
+    const r = await fetch('https://tile.googleapis.com/v1/3dtiles/root.json?key=' + encodeURIComponent(key));
+    if (r.ok) return { ok: true, msg: 'Google: key works! ✔' };
+    let detail = '';
+    try { detail = (await r.json()).error?.message || ''; } catch { /* ignore */ }
+    return { ok: false, msg: `Google said no (HTTP ${r.status}). ${detail}`.trim() };
+  } catch {
+    return { ok: false, msg: 'Google: could not connect. Check your internet, firewall or ad-blocker.' };
+  }
+}
+
+async function testIonToken(token) {
+  if (token.startsWith('AIza')) return { ok: false, msg: 'Cesium: that looks like a Google key. Paste it in the Google box instead.' };
+  try {
+    const r = await fetch('https://api.cesium.com/v1/assets/96188/endpoint?access_token=' + encodeURIComponent(token));
+    if (r.ok) return { ok: true, msg: 'Cesium: token works! ✔' };
+    return { ok: false, msg: `Cesium said no (HTTP ${r.status}). Copy the whole token from ion.cesium.com/tokens.` };
+  } catch {
+    return { ok: false, msg: 'Cesium: could not connect. Check your internet, firewall or ad-blocker.' };
+  }
+}
+
+async function testKeys() {
+  const note = $('#settings-note');
+  note.style.color = '';
+  note.replaceChildren('Testing…');
+  const g = $('#set-google').value.trim();
+  const ion = $('#set-ion').value.trim();
+  if (!g && !ion) { note.replaceChildren('Paste a key first.'); return; }
+  const results = [];
+  if (g) results.push(await testGoogleKey(g));
+  if (ion) results.push(await testIonToken(ion));
+  note.replaceChildren(...results.map((r) => el('div', { style: `color:${r.ok ? 'var(--green)' : 'var(--red)'}` }, r.msg)));
+}
+
+// If the two keys got pasted in the wrong boxes, swap them back.
+function fixSwappedKeys(cfg) {
+  const g = cfg.googleMapsApiKey || '';
+  const ion = cfg.cesiumIonToken || '';
+  if (g.startsWith('eyJ') && !ion) return { ...cfg, googleMapsApiKey: '', cesiumIonToken: g };
+  if (ion.startsWith('AIza') && !g) return { ...cfg, googleMapsApiKey: ion, cesiumIonToken: '' };
+  return cfg;
 }
 
 // ------------------------------------------------------------ flight session
@@ -402,16 +484,19 @@ async function startFlight(job) {
 
   await state.world.waitForTiles(job ? 9000 : 7000);
   $('#loading-text').textContent = 'Getting your drone ready…';
-  const pts = [{ lat, lon }];
+  // Sample the spawn spot plus a small ring around it, and start above the highest
+  // point, so we never begin inside a building or on top of a tower.
+  const pts = [{ lat, lon }, ...[0, 1, 2, 3].map((i) => destination(lat, lon, (i * Math.PI) / 2, 14))];
   if (job) pts.push(job.pickup, job.drop);
   const hs = await state.world.sampleGround(pts);
+  const spawnGround = Math.max(...hs.slice(0, 5));
   const model = await getModel(drone);
   for (const m of Object.values(state.models)) m.model.show = m === model;
   state.world.excluded = [model.model];
 
   const yaw = job ? bearingRad(lat, lon, job.pickup.lat, job.pickup.lon) : state.orbitHeading;
   const f = state.flight;
-  f.reset(drone, model, lat, lon, hs[0], yaw, 15);
+  f.reset(drone, model, lat, lon, spawnGround, yaw, 15);
   f.collisions = state.save.settings.collisions;
   f.infiniteBattery = !job;
   f.cargoKg = 0;
@@ -426,8 +511,8 @@ async function startFlight(job) {
   if (job) {
     const type = JOB_TYPES.find((t) => t.id === job.type);
     state.run.type = type;
-    state.run.pickupB = makeBeacon(job.pickup.lat, job.pickup.lon, hs[1], '#ffb347');
-    state.run.dropB = makeBeacon(job.drop.lat, job.drop.lon, hs[2], '#3ddc97');
+    state.run.pickupB = makeBeacon(job.pickup.lat, job.pickup.lon, hs[5], '#ffb347');
+    state.run.dropB = makeBeacon(job.drop.lat, job.drop.lon, hs[6], '#3ddc97');
     state.run.dropB.entities.forEach((e) => (e.show = false));
     state.run.beacons = [state.run.pickupB, state.run.dropB];
     state.run.legLen = Math.max(50, distanceM(lat, lon, job.pickup.lat, job.pickup.lon));
@@ -520,6 +605,7 @@ function completeJob() {
   state.save.stats.jobs += 1;
   state.save.stats.earned += total;
   state.sfx.deliver();
+  state.input.rumble(0.5, 1, 400);
   persist();
 
   const rows = [['Delivery pay', formatMoney(job.pay)]];
@@ -595,6 +681,7 @@ function stepFlying(dt) {
   if (f.bumpedFlag) {
     f.bumpedFlag = false;
     state.sfx.bump();
+    state.input.rumble(1, 0.6, 220);
     const fl = $('#flash');
     fl.classList.add('on');
     setTimeout(() => fl.classList.remove('on'), 120);
@@ -645,6 +732,7 @@ function updateRun(dt) {
 
   if (run.stage === 'pickup') {
     state.sfx.pickup();
+    state.input.rumble(0.3, 0.8, 160);
     f.cargoKg = job.cargo;
     f.addBattery(0.2);
     state.models[f.spec.id].showCargo(true);
@@ -724,16 +812,45 @@ function updateMarker(t, dist2d) {
   $('#marker-dist').textContent = formatDist(dist2d);
 }
 
+// What the controller can do on the current menu screen.
+function cycleTab(d) {
+  const tabs = ['jobs', 'drones', 'world'];
+  const i = (tabs.indexOf(state.tab) + d + tabs.length) % tabs.length;
+  state.sfx.click();
+  showTab(tabs[i]);
+}
+
+function navContext() {
+  switch (state.mode) {
+    case 'menu': return { root: $('#screen-menu') };
+    case 'hub': return { root: $('#screen-hub'), onBack: () => $('[data-action=menu]').click(), onTab: cycleTab };
+    case 'settings': return { root: $('#screen-settings'), onBack: () => $('[data-action=close-settings]').click() };
+    case 'paused': return { root: $('#screen-pause'), onBack: resumeGame };
+    case 'result': return { root: $('#screen-result'), onBack: () => { const b = $('#result-panel .btn.primary'); if (b) b.click(); } };
+    default: return null;
+  }
+}
+
 function onPreRender() {
   const now = performance.now();
   const dt = Math.min(0.1, (now - state.last) / 1000);
   state.last = now;
   state.input.pollPad();
+  const hasPad = !!state.input.pad;
+  if (hasPad !== state.hasPad) {
+    state.hasPad = hasPad;
+    document.body.classList.toggle('has-pad', hasPad);
+  }
   try {
     if (state.mode === 'flying') stepFlying(dt);
     else if (state.mode === 'paused') {
       if (state.input.consume('Escape') || state.input.consumePad(9)) resumeGame();
-    } else if (['menu', 'hub', 'settings', 'loading'].includes(state.mode)) orbit(dt);
+      else state.padNav.update(dt, navContext());
+    } else {
+      if (['menu', 'hub', 'settings', 'loading'].includes(state.mode)) orbit(dt);
+      const nav = navContext();
+      if (nav) state.padNav.update(dt, nav);
+    }
   } catch (e) {
     console.error('Frame error', e);
   }
@@ -748,6 +865,11 @@ function quit() {
 }
 
 function bindUi() {
+  window.addEventListener('gamepadconnected', () => toast('🎮 Controller connected', 'good'));
+  window.addEventListener('gamepaddisconnected', () => {
+    toast('🎮 Controller disconnected', 'bad');
+    if (state.mode === 'flying') pauseGame();
+  });
   document.addEventListener('click', (e) => {
     const t = e.target.closest('[data-action]');
     if (t) {
@@ -759,6 +881,7 @@ function bindUi() {
       else if (a === 'menu') { state.sfx.click(); setMode('menu'); }
       else if (a === 'freefly') { state.sfx.click(); startFlight(null); }
       else if (a === 'save-settings') saveSettings();
+      else if (a === 'test-keys') testKeys();
       else if (a === 'close-settings') { state.sfx.click(); setMode(state.settingsFrom === 'hub' ? 'hub' : 'menu'); }
       else if (a === 'reset-save') {
         if (confirm('Erase all progress and start again?')) {
@@ -784,12 +907,14 @@ async function boot() {
     fetch('/api/config').then((r) => r.json()).catch(() => ({})),
     fetch('/api/save').then((r) => r.json()).catch(() => null),
   ]);
-  state.cfg = cfg;
+  state.cfg = fixSwappedKeys(cfg);
   state.save = mergeSave(save);
   state.sfx.setVolume(state.save.settings.volume);
+  state.input.rumbleOn = state.save.settings.rumble !== false;
+  state.padNav = new PadNav(state.input);
   try {
     state.world = new World();
-    await state.world.init('cesiumContainer', cfg, state.save.settings.quality);
+    await state.world.init('cesiumContainer', state.cfg, state.save.settings.quality);
   } catch (e) {
     console.error(e);
     $('#world-status').textContent = '⚠ Could not start the 3D world: ' + (e.message || e);

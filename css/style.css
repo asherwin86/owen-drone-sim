@@ -142,6 +142,17 @@ kbd { display: inline-block; min-width: 22px; padding: 1px 6px; margin: 0 2px; b
 .toast.bad { border-color: var(--red); }
 @keyframes toast { 0% { opacity: 0; transform: translateY(-10px); } 8% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
 
+/* controller */
+.help-pad { display: none; }
+body.has-pad .help-pad { display: block; }
+body.has-pad .help-kb { display: none; }
+#gp-hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: none; padding: 7px 16px; border-radius: 99px; background: var(--panel); border: 1px solid var(--line); font-size: 14px; font-weight: 700; color: #dbe5f7; pointer-events: none; white-space: nowrap; }
+body.gp-active #gp-hint { display: block; }
+body.flying #gp-hint { display: none !important; }
+body:not(.gp-active) :focus { outline: none; }
+body.gp-active :focus { outline: 4px solid var(--cyan); outline-offset: 3px; }
+body.gp-active .btn:focus, body.gp-active .tab:focus, body.gp-active .cat:focus, body.gp-active .worldcard:focus { transform: scale(1.04); }
+
 /* result */
 .result h2 { font-size: 36px; margin-bottom: 4px; }
 .result .sub { color: var(--muted); margin-bottom: 14px; }

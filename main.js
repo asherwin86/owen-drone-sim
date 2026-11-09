@@ -11,7 +11,15 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 let win = null;
 
 async function createWindow() {
-  const { port } = await startServer(0, { onQuit: () => app.quit() });
+  // Fixed port when possible, so a Google key's "website restriction" can allow
+  // http://127.0.0.1:47831/* . Falls back to any free port if it is taken.
+  const opts = { onQuit: () => app.quit() };
+  let port;
+  try {
+    ({ port } = await startServer(47831, opts));
+  } catch {
+    ({ port } = await startServer(0, opts));
+  }
   Menu.setApplicationMenu(null);
   win = new BrowserWindow({
     width: 1600,

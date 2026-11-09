@@ -11,6 +11,8 @@ export class Input {
     this.capture = false;
     this.prevPad = [];
     this.padPressed = new Set();
+    this.pad = null;
+    this.rumbleOn = true;
     const block = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab']);
     window.addEventListener('keydown', (e) => {
       if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -49,6 +51,18 @@ export class Input {
     return false;
   }
 
+  /** Vibrate the controller (if it supports it and vibration is on). */
+  rumble(strong = 0.6, weak = 0.3, ms = 150) {
+    if (!this.rumbleOn || !this.pad) return;
+    const act = this.pad.vibrationActuator;
+    if (act && act.playEffect) {
+      try {
+        const p = act.playEffect('dual-rumble', { startDelay: 0, duration: ms, weakMagnitude: weak, strongMagnitude: strong });
+        if (p && p.catch) p.catch(() => {});
+      } catch { /* rumble is optional */ }
+    }
+  }
+
   /** Returns { fwd, right, up, yaw } each in -1..1 */
   axes() {
     const k = (a, b) => (this.down(a) ? 1 : 0) - (this.down(b) ? 1 : 0);
@@ -57,13 +71,22 @@ export class Input {
     let up = k('Space', 'ShiftLeft') + k('ArrowUp', 'ArrowDown') + k('KeyR', 'KeyF');
     let yaw = k('KeyE', 'KeyQ') + k('ArrowRight', 'ArrowLeft');
     if (this.down('ShiftRight', 'ControlLeft', 'KeyC')) up -= 1;
-    const dz = (v) => (Math.abs(v) < 0.14 ? 0 : v);
+    // Controller: dead zone + gentle curve so small stick movements are precise.
+    const DZ = 0.14;
+    const curve = (v) => {
+      const a = Math.abs(v);
+      if (a < DZ) return 0;
+      return Math.sign(v) * Math.pow((a - DZ) / (1 - DZ), 1.4);
+    };
     if (this.pad) {
       const a = this.pad.axes;
-      yaw += dz(a[0] || 0);
-      up += -dz(a[1] || 0);
-      right += dz(a[2] || 0);
-      fwd += -dz(a[3] || 0);
+      const btn = (i) => (this.pad.buttons[i] ? this.pad.buttons[i].value || (this.pad.buttons[i].pressed ? 1 : 0) : 0);
+      yaw += curve(a[0] || 0);          // left stick X: turn
+      up += -curve(a[1] || 0);          // left stick Y: up / down
+      right += curve(a[2] || 0);        // right stick X: slide left / right
+      fwd += -curve(a[3] || 0);         // right stick Y: forward / back
+      up += btn(7) - btn(6);            // RT up, LT down
+      yaw += btn(5) - btn(4);           // RB / LB turn
     }
     const len = Math.hypot(fwd, right);
     if (len > 1) { fwd /= len; right /= len; }
@@ -227,7 +250,9 @@ export class Flight {
       const origin = Cesium.Cartesian3.add(pos, Cesium.Cartesian3.multiplyByScalar(up, 1.0, new Cesium.Cartesian3()), new Cesium.Cartesian3());
       const down = Cesium.Cartesian3.negate(up, new Cesium.Cartesian3());
       const d = world.rayDistance(origin, down);
-      if (d !== undefined) this.groundH = this.h + 1.0 - d;
+      // Never let a probe teleport us upward: if a surface is at/above our level
+      // we are touching it, so treat it as the floor right under us.
+      if (d !== undefined) this.groundH = Math.min(this.h + 1.0 - d, this.h - 0.36);
     }
 
     // obstacle ahead along our motion

@@ -25,9 +25,11 @@ Needs [Node.js](https://nodejs.org) 20 or newer.
 Without a key you get a free satellite map with a simple stand-in Eiffel Tower. With a Google Maps key you get Google's Photorealistic 3D Tiles: real buildings, trees and landmarks everywhere.
 
 1. In Google Cloud, create a project and enable the **Map Tiles API**, then create an API key. (Google may ask for billing details; check their current pricing and terms.)
-2. In the game: **Settings → Google Maps API key**, paste it, **Save**, then **Restart now**.
+2. In the game: **Settings → Google Maps API key**, paste it, press **Test keys** (it tells you exactly what is wrong if it fails), then **Save** and **Restart now**.
 
-The key is saved in `config.json` on your computer. That file is git-ignored so it never gets uploaded. Never share your key or commit it.
+The game must be running (the `start-game.bat` window or `npm run web` must stay open) for Save to work. Keys are saved to `%USERPROFILE%\DroneSim\config.json`, outside the repo, so they never get uploaded. Never share your key.
+
+If you restrict the key to certain websites in Google Cloud, allow `http://127.0.0.1:47831/*`.
 
 Optional: a free [Cesium ion](https://ion.cesium.com) token gives real terrain and 3D buildings without Google.
 
@@ -51,7 +53,27 @@ If the battery runs out the drone lands and the job fails, but you never lose mo
 | Esc | pause |
 | F11 | full screen (desktop app) |
 
-Xbox-style gamepads work too: left stick = turn and up/down, right stick = move, Y = camera, Start = pause.
+### Controller (Xbox / PlayStation / any standard gamepad)
+
+Plug it in and press a button. The game shows controller hints automatically.
+
+| Control | In flight |
+| --- | --- |
+| Right stick | fly forward / back / slide left / slide right |
+| Left stick | turn (left/right), up / down (up/down) |
+| RT / LT | up / down |
+| LB / RB | turn left / right |
+| Y | switch camera |
+| Start | pause (B resumes) |
+
+| Control | In menus |
+| --- | --- |
+| D-pad or left stick | move the highlight (left/right changes dropdowns and sliders) |
+| A | select |
+| B | back |
+| LB / RB | switch Jobs / Drones / World tabs |
+
+The controller buzzes when you bump into something, pick up and deliver. You can turn that off in Settings. If your pad is not detected, press any button on it while the game window is selected.
 
 ## Project layout
 

@@ -1,6 +1,12 @@
 // World: the Cesium globe, map source selection, and ground/obstacle probing.
 const Cesium = window.Cesium;
 
+function describeError(e) {
+  const status = e && e.statusCode ? `HTTP ${e.statusCode}. ` : '';
+  const msg = String((e && e.message) || e || 'unknown error').replace(/\s+/g, ' ').slice(0, 160);
+  return status + msg;
+}
+
 const QUALITY = {
   high: { sse: 12, resolution: 1 },
   medium: { sse: 20, resolution: 1 },
@@ -86,7 +92,7 @@ export class World {
         return;
       } catch (e) {
         console.warn('Google tiles failed', e);
-        errors.push('Google Maps key did not work (' + (e.message || e) + ')');
+        errors.push('Google Maps key did not work: ' + describeError(e));
       }
     }
 
@@ -103,7 +109,7 @@ export class World {
         return;
       } catch (e) {
         console.warn('Cesium ion failed', e);
-        errors.push('Cesium ion token did not work');
+        errors.push('Cesium ion token did not work: ' + describeError(e));
       }
     }
 

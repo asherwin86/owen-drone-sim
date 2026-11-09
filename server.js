@@ -10,7 +10,10 @@ const os = require('os');
 const ROOT = __dirname;
 const SAVE_DIR = path.join(os.homedir(), 'DroneSim');
 const SAVE_FILE = path.join(SAVE_DIR, 'save.json');
-const CONFIG_FILE = path.join(ROOT, 'config.json');
+// Keys live in the user's own folder (not the game folder) so they survive
+// updates/re-downloads, never end up in git, and the folder is always writable.
+const CONFIG_FILE = path.join(SAVE_DIR, 'config.json');
+const LEGACY_CONFIG_FILE = path.join(ROOT, 'config.json');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -56,6 +59,12 @@ function readJson(file, fallback) {
   }
 }
 
+function loadConfig() {
+  // Prefer the user-folder config; fall back to an older config.json next to the game.
+  const legacy = readJson(LEGACY_CONFIG_FILE, {});
+  return { ...DEFAULT_CONFIG, ...legacy, ...readJson(CONFIG_FILE, {}) };
+}
+
 function writeJson(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
@@ -92,16 +101,20 @@ function hostIsLocal(req) {
 async function handleApi(req, res, pathname) {
   if (pathname === '/api/config') {
     if (req.method === 'GET') {
-      return send(res, 200, JSON.stringify({ ...DEFAULT_CONFIG, ...readJson(CONFIG_FILE, {}) }));
+      return send(res, 200, JSON.stringify(loadConfig()));
     }
     if (req.method === 'POST') {
       const incoming = JSON.parse((await readBody(req)) || '{}');
-      const current = { ...DEFAULT_CONFIG, ...readJson(CONFIG_FILE, {}) };
+      const current = loadConfig();
       for (const k of Object.keys(DEFAULT_CONFIG)) {
         if (typeof incoming[k] === 'string') current[k] = incoming[k].trim();
       }
-      writeJson(CONFIG_FILE, current);
-      return send(res, 200, JSON.stringify({ ok: true }));
+      try {
+        writeJson(CONFIG_FILE, current);
+      } catch (e) {
+        return send(res, 500, JSON.stringify({ ok: false, error: `Could not write ${CONFIG_FILE}: ${e.message}` }));
+      }
+      return send(res, 200, JSON.stringify({ ok: true, file: CONFIG_FILE }));
     }
   }
   if (pathname === '/api/save') {
