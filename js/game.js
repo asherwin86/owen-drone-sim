@@ -309,22 +309,25 @@ function renderWorldTab() {
     if (!q) return;
     results.replaceChildren(el('span', { class: 'muted' }, 'Searching…'));
     try {
-      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } });
-      const data = await r.json();
+      const data = await state.world.searchPlaces(q);
       results.replaceChildren();
       if (!data.length) results.append(el('span', { class: 'muted' }, 'No places found. Try another name.'));
       for (const p of data) {
-        const parts = p.display_name.split(', ');
-        const title = parts[0];
-        results.append(el('button', { class: 'worldcard', onclick: () => goTo(parseFloat(p.lat), parseFloat(p.lon), title) },
-          el('b', {}, title), el('span', {}, parts.slice(1, 3).join(', '))));
+        results.append(el('button', { class: 'worldcard', onclick: () => goTo(p.lat, p.lon, p.name) },
+          el('b', {}, p.name), el('span', {}, p.detail)));
       }
     } catch {
       results.replaceChildren(el('span', { class: 'muted' }, 'Could not search (no internet?). Pick a landmark below.'));
     }
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
-  root.append(el('div', { class: 'searchrow' }, input, el('button', { class: 'btn', onclick: doSearch }, '🔎 Search')), results);
+  if (state.world.searchMode === 'none') {
+    // Google's rules: with Google 3D tiles we may only search with Google's geocoder.
+    input.disabled = true;
+    input.placeholder = 'Search needs a free Cesium token (Settings). Pick a place below.';
+  }
+  root.append(el('div', { class: 'searchrow' }, input, el('button', { class: 'btn', disabled: state.world.searchMode === 'none', onclick: doSearch }, '🔎 Search')), results);
+  if (state.world.searchMode === 'google') root.append(el('div', { class: 'muted', style: 'font-size:12px;margin-top:-6px' }, 'Place search by Google'));
   root.append(el('h3', {}, 'Famous places'));
   const grid = el('div', { class: 'worldgrid' });
   for (const l of LANDMARKS) {

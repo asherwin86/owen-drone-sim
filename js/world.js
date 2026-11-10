@@ -1,4 +1,5 @@
 // World: the Cesium globe, map source selection, and ground/obstacle probing.
+import { PUBLIC_ION_TOKEN } from './public-config.js';
 const Cesium = window.Cesium;
 
 function describeError(e) {
@@ -23,6 +24,8 @@ export class World {
     this.excluded = []; // objects ignored by ray probes (drone, beacons)
     this.permanentExcluded = []; // placeholder landmarks etc. (never count as ground)
     this.probeOk = true;
+    this.searchMode = 'osm'; // 'google' | 'osm' | 'none'
+    this.geocoder = null;
   }
 
   get ignoreList() {
@@ -89,6 +92,10 @@ export class World {
         scene.globe.show = false;
         this.mode = 'google';
         this.statusText = 'Google Photorealistic 3D Earth';
+        if (cfg.cesiumIonToken) {
+          Cesium.Ion.defaultAccessToken = cfg.cesiumIonToken;
+          this.setupGeocoder();
+        }
         return;
       } catch (e) {
         console.warn('Google tiles failed', e);
@@ -96,16 +103,43 @@ export class World {
       }
     }
 
-    if (cfg.cesiumIonToken) {
+    const ownIon = cfg.cesiumIonToken;
+    const ionToken = ownIon || PUBLIC_ION_TOKEN;
+    if (ionToken) Cesium.Ion.defaultAccessToken = ionToken;
+
+    // Free photorealistic Google 3D through the player's OWN free Cesium account.
+    // (The shared public token deliberately skips this so it can't use up one quota.)
+    if (ownIon) {
       try {
-        Cesium.Ion.defaultAccessToken = cfg.cesiumIonToken;
+        const ts = await Cesium.createGooglePhotorealistic3DTileset(
+          { onlyUsingWithGoogleGeocoder: true },
+          { maximumScreenSpaceError: 12 }
+        );
+        scene.primitives.add(ts);
+        this.tilesets.push(ts);
+        scene.globe.show = false;
+        this.mode = 'google';
+        this.statusText = 'Google Photorealistic 3D Earth (free through Cesium)';
+        this.setupGeocoder();
+        return;
+      } catch (e) {
+        console.warn('Photorealistic via Cesium ion failed', e);
+        errors.push('Photorealistic 3D did not load: ' + describeError(e));
+      }
+    }
+
+    if (ionToken) {
+      try {
         viewer.scene.setTerrain(Cesium.Terrain.fromWorldTerrain());
         viewer.imageryLayers.add(Cesium.ImageryLayer.fromWorldImagery());
         const osm = await Cesium.createOsmBuildingsAsync();
         scene.primitives.add(osm);
         this.tilesets.push(osm);
         this.mode = 'ion';
-        this.statusText = 'Cesium terrain + 3D buildings';
+        this.statusText = ownIon
+          ? 'Cesium terrain + 3D buildings'
+          : 'Basic 3D buildings. For the realistic 3D Earth, add a free Cesium token in Settings';
+        if (errors.length) this.statusText += ' (' + errors[0] + ')';
         return;
       } catch (e) {
         console.warn('Cesium ion failed', e);
@@ -127,9 +161,51 @@ export class World {
       );
     }
     this.mode = 'basic';
-    this.statusText = 'Basic map (add a Google Maps key in Settings for the full 3D Earth)';
+    this.statusText = 'Basic map. For the realistic 3D Earth, add a free Cesium token in Settings';
     if (errors.length) this.statusText = errors.join('. ') + '. Using basic map.';
     this.addLandmarkPlaceholders();
+  }
+
+  /**
+   * Google's rules: Photorealistic 3D Tiles may only be used with Google's own place
+   * search. We use Google's geocoder through Cesium ion. Without a Cesium token, search
+   * is switched off when Google tiles are showing (searchMode = 'none').
+   */
+  setupGeocoder() {
+    try {
+      this.geocoder = new Cesium.IonGeocoderService({
+        scene: this.scene,
+        geocodeProviderType: Cesium.IonGeocodeProviderType.GOOGLE,
+      });
+      this.searchMode = 'google';
+    } catch (e) {
+      console.warn('Google geocoder unavailable', e);
+      this.searchMode = 'none';
+    }
+  }
+
+  /** Search for a place. Returns [{ name, detail, lat, lon }]. */
+  async searchPlaces(query) {
+    if (this.searchMode === 'google') {
+      const results = await this.geocoder.geocode(query, Cesium.GeocodeType.SEARCH);
+      return results.slice(0, 6).map((r) => {
+        const d = r.destination;
+        const c = d instanceof Cesium.Rectangle ? Cesium.Rectangle.center(d) : Cesium.Cartographic.fromCartesian(d);
+        const parts = String(r.displayName).split(', ');
+        return {
+          name: parts[0],
+          detail: parts.slice(1, 3).join(', '),
+          lat: Cesium.Math.toDegrees(c.latitude),
+          lon: Cesium.Math.toDegrees(c.longitude),
+        };
+      });
+    }
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&q=' + encodeURIComponent(query), { headers: { Accept: 'application/json' } });
+    const data = await r.json();
+    return data.map((p) => {
+      const parts = p.display_name.split(', ');
+      return { name: parts[0], detail: parts.slice(1, 3).join(', '), lat: parseFloat(p.lat), lon: parseFloat(p.lon) };
+    });
   }
 
   applyQuality(q) {

@@ -65,13 +65,14 @@
       <div class="panel wide">
         <h2>Settings</h2>
         <div class="field">
-          <label for="set-google">Google Maps API key <small>(turns on the real 3D Earth)</small></label>
-          <input id="set-google" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your key here" />
-          <small class="muted">Needs the <b>Map Tiles API</b> enabled in Google Cloud. Stored only on this computer.</small>
+          <label for="set-ion">Cesium token <small>(FREE: unlocks the realistic 3D Earth)</small></label>
+          <input id="set-ion" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your free Cesium token here" />
+          <small class="muted">Make a free account at <b>ion.cesium.com</b>, open <b>Access Tokens</b>, copy the Default token. Stored only on this computer.</small>
         </div>
         <div class="field">
-          <label for="set-ion">Cesium ion token <small>(optional, free 3D buildings + terrain)</small></label>
-          <input id="set-ion" type="password" autocomplete="off" spellcheck="false" placeholder="Optional" />
+          <label for="set-google">Google Maps API key <small>(optional, advanced; Google may charge for this)</small></label>
+          <input id="set-google" type="password" autocomplete="off" spellcheck="false" placeholder="Optional" />
+          <small class="muted">Needs the <b>Map Tiles API</b> enabled in Google Cloud. Most people can skip this.</small>
         </div>
         <div class="row">
           <div class="field">
