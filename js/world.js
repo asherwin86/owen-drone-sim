@@ -1,5 +1,6 @@
 // World: the Cesium globe, map source selection, and ground/obstacle probing.
-import { PUBLIC_ION_TOKEN } from './public-config.js';
+import { OpenTerrain } from './terrain.js';
+import { OpenBuildings } from './buildings.js';
 const Cesium = window.Cesium;
 
 function describeError(e) {
@@ -18,7 +19,9 @@ export class World {
   constructor() {
     this.viewer = null;
     this.scene = null;
-    this.mode = 'basic'; // 'google' | 'ion' | 'basic'
+    this.mode = 'basic'; // 'google' | 'open' | 'basic'
+    this.open = null; // free OpenStreetMap buildings (mode 'open')
+    this.terrain = null;
     this.statusText = '';
     this.tilesets = [];
     this.excluded = []; // objects ignored by ray probes (drone, beacons)
@@ -77,10 +80,10 @@ export class World {
   }
 
   async loadMapSource(cfg) {
-    const viewer = this.viewer;
     const scene = this.scene;
     const errors = [];
 
+    // 1) The player's own Google Maps key (optional, advanced).
     if (cfg.googleMapsApiKey) {
       try {
         const ts = await Cesium.createGooglePhotorealistic3DTileset(
@@ -103,14 +106,10 @@ export class World {
       }
     }
 
-    const ownIon = cfg.cesiumIonToken;
-    const ionToken = ownIon || PUBLIC_ION_TOKEN;
-    if (ionToken) Cesium.Ion.defaultAccessToken = ionToken;
-
-    // Free photorealistic Google 3D through the player's OWN free Cesium account.
-    // (The shared public token deliberately skips this so it can't use up one quota.)
-    if (ownIon) {
+    // 2) Photorealistic Google 3D through the player's own FREE Cesium account.
+    if (cfg.cesiumIonToken) {
       try {
+        Cesium.Ion.defaultAccessToken = cfg.cesiumIonToken;
         const ts = await Cesium.createGooglePhotorealistic3DTileset(
           { onlyUsingWithGoogleGeocoder: true },
           { maximumScreenSpaceError: 12 }
@@ -128,26 +127,30 @@ export class World {
       }
     }
 
-    if (ionToken) {
-      try {
-        viewer.scene.setTerrain(Cesium.Terrain.fromWorldTerrain());
-        viewer.imageryLayers.add(Cesium.ImageryLayer.fromWorldImagery());
-        const osm = await Cesium.createOsmBuildingsAsync();
-        scene.primitives.add(osm);
-        this.tilesets.push(osm);
-        this.mode = 'ion';
-        this.statusText = ownIon
-          ? 'Cesium terrain + 3D buildings'
-          : 'Basic 3D buildings. For the realistic 3D Earth, add a free Cesium token in Settings';
-        if (errors.length) this.statusText += ' (' + errors[0] + ')';
-        return;
-      } catch (e) {
-        console.warn('Cesium ion failed', e);
-        errors.push('Cesium ion token did not work: ' + describeError(e));
-      }
+    // 3) Default for EVERYONE: free, no key, no limits. Real terrain + OpenStreetMap 3D buildings.
+    try {
+      await this.loadOpenWorld();
+      this.statusText = 'Free 3D world (real terrain + OpenStreetMap buildings). For photo-realistic 3D, add a free Cesium token in Settings';
+      if (errors.length) this.statusText = errors[0] + '. Using the free 3D world.';
+      return;
+    } catch (e) {
+      console.warn('Open world failed, using basic map', e);
+      errors.push('Free 3D world did not load: ' + describeError(e));
+      this.open = null;
+      this.terrain = null;
+      this.scene.terrainProvider = new Cesium.EllipsoidTerrainProvider();
     }
 
-    // Basic map: free satellite imagery, flat ground.
+    // 4) Last resort (e.g. offline): flat satellite map.
+    await this.addSatelliteImagery();
+    this.mode = 'basic';
+    this.statusText = errors.join('. ') + '. Using the basic map.';
+    this.addLandmarkPlaceholders(0);
+  }
+
+  async addSatelliteImagery() {
+    const viewer = this.viewer;
+    if (viewer.imageryLayers.length) return;
     try {
       const provider = await Cesium.ArcGisMapServerImageryProvider.fromUrl(
         'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer',
@@ -160,10 +163,34 @@ export class World {
         new Cesium.OpenStreetMapImageryProvider({ url: 'https://tile.openstreetmap.org/' })
       );
     }
-    this.mode = 'basic';
-    this.statusText = 'Basic map. For the realistic 3D Earth, add a free Cesium token in Settings';
-    if (errors.length) this.statusText = errors.join('. ') + '. Using basic map.';
-    this.addLandmarkPlaceholders();
+  }
+
+  /** Free, key-less world: AWS terrain + satellite imagery + OpenFreeMap buildings. */
+  async loadOpenWorld() {
+    this.terrain = new OpenTerrain();
+    this.open = new OpenBuildings(this, this.terrain);
+    await this.open.init(); // fails fast (offline etc.) before we change anything
+    await this.addSatelliteImagery();
+    this.scene.terrainProvider = this.terrain.provider();
+    this.viewer.creditDisplay.addStaticCredit(
+      new Cesium.Credit(
+        'Buildings: <a href="https://openfreemap.org" target="_blank">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank">OpenMapTiles</a> data © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+        true
+      )
+    );
+    this.mode = 'open';
+    this.searchMode = 'osm';
+    const groundAtEiffel = await this.terrain.heightAt(2.2945, 48.8584);
+    this.addLandmarkPlaceholders(groundAtEiffel);
+  }
+
+  /** Keep nearby buildings loaded around (lat, lon). Cheap to call every frame. */
+  updateOpen(lat, lon) {
+    if (this.open) this.open.update(lat, lon);
+  }
+
+  async ensureOpen(lat, lon) {
+    if (this.open) await this.open.ensureAround(lat, lon);
   }
 
   /**
@@ -216,11 +243,11 @@ export class World {
   }
 
   /** Stand-in Eiffel Tower for the basic map (the real one appears with Google 3D tiles). */
-  addLandmarkPlaceholders() {
+  addLandmarkPlaceholders(baseH = 0) {
     const mk = (lon, lat, h0, h1, r0, r1) => {
       const mid = (h0 + h1) / 2;
       const ent = this.viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(lon, lat, mid),
+        position: Cesium.Cartesian3.fromDegrees(lon, lat, baseH + mid),
         cylinder: {
           length: h1 - h0,
           topRadius: r1,
@@ -262,6 +289,15 @@ export class World {
   /** Ground (or roof) height at lon/lat degrees. Falls back to 0. */
   async sampleGround(points) {
     // points: [{lat, lon}] -> [heightMeters]
+    if (this.mode === 'open' && this.terrain) {
+      // Terrain from the free elevation data, raised to the roof where a building stands.
+      return Promise.all(points.map(async (p) => {
+        let h = await this.terrain.heightAt(p.lon, p.lat);
+        const roof = this.open.roofHeightAt(p.lat, p.lon);
+        if (roof !== undefined && roof > h) h = roof;
+        return h;
+      }));
+    }
     try {
       const carts = points.map((p) => Cesium.Cartographic.fromDegrees(p.lon, p.lat));
       if (this.scene.sampleHeightSupported) {
@@ -274,8 +310,38 @@ export class World {
     return points.map(() => 0);
   }
 
+  /**
+   * Free 3D world: height of the surface right under a flying point (terrain or the
+   * roof you are above), worked out from our own data. Undefined in other modes.
+   */
+  groundBelow(lat, lon, h) {
+    if (this.mode !== 'open' || !this.terrain) return undefined;
+    let g = this.terrain.heightAtSync(lon, lat);
+    if (g === undefined) return undefined;
+    const roof = this.open.roofBelow(lat, lon, h);
+    if (roof !== undefined && roof > g) g = roof;
+    return g;
+  }
+
+  /** Free 3D world: march along a ray looking for terrain or a building. */
+  openRay(origin, dir, maxDist = 40, includeTerrain = true) {
+    const p = new Cesium.Cartesian3();
+    for (let t = 0.6; t <= maxDist; t += t < 12 ? 1.2 : 4) {
+      Cesium.Cartesian3.add(origin, Cesium.Cartesian3.multiplyByScalar(dir, t, p), p);
+      const c = Cesium.Cartographic.fromCartesian(p);
+      const lat = Cesium.Math.toDegrees(c.latitude), lon = Cesium.Math.toDegrees(c.longitude);
+      if (includeTerrain) {
+        const g = this.terrain.heightAtSync(lon, lat);
+        if (g !== undefined && c.height <= g) return t;
+      }
+      if (this.open.solidAt(lat, lon, c.height)) return t;
+    }
+    return undefined;
+  }
+
   /** Distance from origin along dir to the first surface, or undefined. */
   rayDistance(origin, dir) {
+    if (this.mode === 'open' && this.terrain) return this.openRay(origin, dir);
     if (!this.probeOk) return undefined;
     try {
       if (!this.scene.pickPositionSupported) {

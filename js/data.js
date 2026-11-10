@@ -103,5 +103,5 @@ export const DEFAULT_SAVE = {
   lon: LANDMARKS[0].lon,
   placeName: LANDMARKS[0].name,
   stats: { jobs: 0, earned: 0, km: 0 },
-  settings: { quality: 'high', volume: 0.5, collisions: true, units: 'kmh', rumble: true },
+  settings: { quality: 'high', volume: 0.5, collisions: true, units: 'kmh', rumble: true, mapSource: 'auto' },
 };

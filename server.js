@@ -44,6 +44,7 @@ const ALLOWED_PREFIXES = [
   '/assets/',
   '/concept/',
   '/node_modules/cesium/Build/Cesium/',
+  '/node_modules/earcut/src/',
 ];
 
 const DEFAULT_CONFIG = { googleMapsApiKey: '', cesiumIonToken: '' };

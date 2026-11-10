@@ -12,7 +12,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "cesium": "^1.147.0"
+    "cesium": "^1.147.0",
+    "earcut": "^3.2.4"
   },
   "devDependencies": {
     "electron": "^45.2.3"

@@ -20,30 +20,37 @@ npm run web      # or: play in a browser at http://127.0.0.1:47831
 
 Needs [Node.js](https://nodejs.org) 20 or newer.
 
-## Turn on the realistic 3D Earth (free)
+## The world: free for everyone, forever
 
-Without a token you get a basic satellite map. With a **free Cesium token** you get Google's Photorealistic 3D Tiles: real, fully textured buildings, trees and landmarks everywhere (the Eiffel Tower, the Opera House, your own street).
+The game works out of the box with **no account, no key and no limits**. It builds a 3D Earth from open data:
+
+| Part | Source |
+| --- | --- |
+| Real mountains and hills | [Terrain Tiles on AWS](https://registry.opendata.aws/terrain-tiles/) (open data) |
+| Satellite photos on the ground | Esri World Imagery |
+| 3D buildings with real heights, roofs and windows | [OpenFreeMap](https://openfreemap.org) / [OpenStreetMap](https://www.openstreetmap.org/copyright) |
+
+Buildings are generated in the game from OpenStreetMap outlines and heights, so they look like a detailed city model (brick, stone, concrete and glass with windows), not photographs. Landmarks such as the Eiffel Tower are simple stand-ins. Attribution is shown in the corner of the game and must stay visible.
+
+Needs an internet connection. If you are offline the game falls back to a flat satellite map.
+
+### Optional upgrade: photo-realistic 3D (still free)
+
+For real photographic 3D (the actual Eiffel Tower, trees, every street) add a **free Cesium token**:
 
 1. Make a free account at <https://ion.cesium.com> (no credit card).
 2. Open **Access Tokens** and copy the **Default token**.
 3. In the game: **Settings → Cesium token**, paste it, press **Test keys**, then **Save** and **Restart now**.
 
 Good to know:
-- The free plan is for **personal, non-commercial** use and includes about **1,000 map sessions a month** (a session starts each time the game loads the world). Cesium treats this limit as soft. Check <https://cesium.com/platform/cesium-ion/pricing/> for the current rules.
-- Google requires place search to use Google's own search, so the World tab search uses Google's geocoder through Cesium. Google's logo and credits are shown in the corner and must stay visible.
-- The game must be running (the `start-game.bat` window or `npm run web` must stay open) for Save to work. Tokens are saved to `%USERPROFILE%DroneSimconfig.json`, outside the repo, so they never get uploaded. Never share your token.
+- The free plan is for **personal, non-commercial** use and includes about **1,000 map sessions a month** (a session starts each time the game loads the world), so it is an upgrade for each player, not something one account can share. Cesium treats the limit as soft. See <https://cesium.com/platform/cesium-ion/pricing/>.
+- Google requires place search to use Google's own search, so with photo-realistic 3D the World tab search uses Google's geocoder through Cesium. Google's logo and credits are shown in the corner and must stay visible.
+- Past the monthly limit the game still works: choose **Settings → Map → Free 3D world only** (or just remove the token) and you are back on the unlimited free world.
+- The game must be running (the `start-game.bat` window or `npm run web` must stay open) for Save to work. Tokens are saved to `%USERPROFILE%\DroneSim\config.json`, outside the repo, so they never get uploaded. Never share your token.
 
 ### Optional: use your own Google Maps key instead
 
 Advanced, and Google may charge for it. Enable the **Map Tiles API** in Google Cloud, create a key, and paste it in **Settings → Google Maps API key**. If you restrict the key to websites, allow `http://127.0.0.1:47831/*`. Never put a Google key in the repo.
-
-### Free basic 3D buildings for every player (for the repo owner)
-
-If `PUBLIC_ION_TOKEN` in `js/public-config.js` holds a **restricted** token, every player gets real terrain and plain grey 3D buildings without any setup (the realistic version still needs their own free token, so your monthly quota is not used up):
-
-1. Sign in at <https://ion.cesium.com/tokens> and **Create token**.
-2. Tick only **assets:read**, select only *Cesium World Terrain*, the imagery asset and *Cesium OSM Buildings* (not the Google Photorealistic asset), and set **Allowed URLs** to `http://127.0.0.1:47831` and `http://localhost:47831`.
-3. Paste it into `js/public-config.js` and commit. It is safe to be public because it is read-only and locked to those assets and addresses. **Never commit a Google key or a full-access token.**
 
 ## How to play
 
@@ -95,7 +102,10 @@ server.js             tiny local server + save/config files
 index.html, css/      screens and styling
 js/game.js            menus, jobs, shop, flight sessions, HUD
 js/flight.js          drone physics, input, cameras, collisions
-js/world.js           Cesium globe, map sources, ground/obstacle probes
+js/world.js           Cesium globe, map sources, ground/building lookups
+js/terrain.js         free real-world terrain (AWS open data)
+js/buildings.js       free 3D buildings from OpenStreetMap vector tiles
+js/mvt.js             tiny vector-tile decoder
 js/droneModel.js      drone 3D model built in code
 js/data.js            drones, job types, landmarks (edit to rebalance!)
 ```

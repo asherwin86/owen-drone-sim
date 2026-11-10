@@ -65,7 +65,7 @@
       <div class="panel wide">
         <h2>Settings</h2>
         <div class="field">
-          <label for="set-ion">Cesium token <small>(FREE: unlocks the realistic 3D Earth)</small></label>
+          <label for="set-ion">Cesium token <small>(optional, FREE: upgrades to photo-realistic 3D)</small></label>
           <input id="set-ion" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your free Cesium token here" />
           <small class="muted">Make a free account at <b>ion.cesium.com</b>, open <b>Access Tokens</b>, copy the Default token. Stored only on this computer.</small>
         </div>
@@ -99,7 +99,10 @@
             <label for="set-rumble">Controller vibration</label>
             <select id="set-rumble"><option value="on">On</option><option value="off">Off</option></select>
           </div>
-          <div class="field"></div>
+          <div class="field">
+            <label for="set-map">Map <small>(needs a restart)</small></label>
+            <select id="set-map"><option value="auto">Best available</option><option value="free">Free 3D world only</option></select>
+          </div>
         </div>
         <p id="settings-note" class="muted"></p>
         <div class="btn-row">

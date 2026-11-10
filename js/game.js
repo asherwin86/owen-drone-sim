@@ -124,6 +124,7 @@ function setFocus(lat, lon) {
 function orbit(dt) {
   const cam = state.world.viewer.camera;
   const f = state.focus;
+  state.world.updateOpen(f.lat, f.lon);
   state.orbitHeading += dt * (state.mode === 'menu' ? 0.07 : 0.04);
   const center = Cesium.Cartesian3.fromDegrees(f.lon, f.lat, f.h);
   const range = state.mode === 'menu' ? 520 : 700;
@@ -347,6 +348,7 @@ function openSettings(from) {
   $('#set-volume').value = s.volume;
   $('#set-collide').value = s.collisions ? 'on' : 'off';
   $('#set-rumble').value = s.rumble === false ? 'off' : 'on';
+  $('#set-map').value = s.mapSource === 'free' ? 'free' : 'auto';
   $('#settings-note').replaceChildren();
   setMode('settings');
 }
@@ -361,6 +363,9 @@ async function saveSettings() {
   s.units = $('#set-units').value;
   s.volume = parseFloat($('#set-volume').value);
   s.collisions = $('#set-collide').value === 'on';
+  const newMap = $('#set-map').value;
+  const mapChanged = newMap !== (s.mapSource === 'free' ? 'free' : 'auto');
+  s.mapSource = newMap;
   s.rumble = $('#set-rumble').value === 'on';
   state.input.rumbleOn = s.rumble;
   state.sfx.setVolume(s.volume);
@@ -383,6 +388,8 @@ async function saveSettings() {
         ? '⚠ Could not save: the game server is not running. Start the game again (start-game.bat, or "npm run web"), then reload this page and try again.'
         : '⚠ Could not save the keys: ' + e.message);
     }
+  } else if (mapChanged) {
+    note.append('Saved! Restart the game to switch the map. ', el('button', { class: 'btn small', onclick: () => location.reload() }, 'Restart now'));
   } else {
     note.append('Saved!');
   }
@@ -485,6 +492,7 @@ async function startFlight(job) {
   state.focus = { lat: spawn.lat, lon: spawn.lon, h: state.focus.h };
   state.world.setDaylight(lon, lat);
 
+  await state.world.ensureOpen(lat, lon);
   await state.world.waitForTiles(job ? 9000 : 7000);
   $('#loading-text').textContent = 'Getting your drone ready…';
   // Sample the spawn spot plus a small ring around it, and start above the highest
@@ -679,6 +687,7 @@ function stepFlying(dt) {
 
   f.update(dt, input.axes());
   f.render(dt);
+  state.world.updateOpen(f.latDeg, f.lonDeg);
   state.sfx.rotor(f.rotorOn, f.load || 0);
 
   if (f.bumpedFlag) {
@@ -917,7 +926,9 @@ async function boot() {
   state.padNav = new PadNav(state.input);
   try {
     state.world = new World();
-    await state.world.init('cesiumContainer', state.cfg, state.save.settings.quality);
+    // "Free 3D world only" (or ?free in the address) ignores any saved keys for this run.
+    const freeOnly = state.save.settings.mapSource === 'free' || new URLSearchParams(location.search).has('free');
+    await state.world.init('cesiumContainer', freeOnly ? {} : state.cfg, state.save.settings.quality);
   } catch (e) {
     console.error(e);
     $('#world-status').textContent = '⚠ Could not start the 3D world: ' + (e.message || e);

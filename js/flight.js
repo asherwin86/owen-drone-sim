@@ -243,8 +243,11 @@ export class Flight {
     const enu = Cesium.Transforms.eastNorthUpToFixedFrame(pos, Cesium.Ellipsoid.WGS84, this._enu);
     const t0 = performance.now();
 
-    // ground height straight down
-    if (this.probeTimerD <= 0) {
+    // ground height straight down (free 3D world: exact, from our own terrain + roof data)
+    if (world.mode === 'open') {
+      const g = world.groundBelow(this.latDeg, this.lonDeg, this.h);
+      if (g !== undefined) this.groundH = g;
+    } else if (this.probeTimerD <= 0) {
       this.probeTimerD = 0.3 * this.probeScale;
       const up = new Cesium.Cartesian3(enu[8], enu[9], enu[10]);
       const origin = Cesium.Cartesian3.add(pos, Cesium.Cartesian3.multiplyByScalar(up, 1.0, new Cesium.Cartesian3()), new Cesium.Cartesian3());
@@ -256,8 +259,9 @@ export class Flight {
     }
 
     // obstacle ahead along our motion
-    if (this.collisions && this.probeTimerF <= 0 && this.speed3 > 1.5) {
-      this.probeTimerF = 0.1 * this.probeScale;
+    const analytic = world.mode === 'open'; // exact + cheap, so check every frame
+    if (this.collisions && this.probeTimerF <= 0 && this.speed3 > (analytic ? 0.4 : 1.5)) {
+      this.probeTimerF = analytic ? 0 : 0.1 * this.probeScale;
       const east = new Cesium.Cartesian3(enu[0], enu[1], enu[2]);
       const north = new Cesium.Cartesian3(enu[4], enu[5], enu[6]);
       const up = new Cesium.Cartesian3(enu[8], enu[9], enu[10]);
@@ -268,9 +272,11 @@ export class Flight {
       Cesium.Cartesian3.multiplyByScalar(north, this.vN / sp, tmp); Cesium.Cartesian3.add(dir, tmp, dir);
       Cesium.Cartesian3.multiplyByScalar(up, this.vU / sp, tmp); Cesium.Cartesian3.add(dir, tmp, dir);
       Cesium.Cartesian3.normalize(dir, dir);
-      const d = world.rayDistance(pos, dir);
+      // (free 3D world: only buildings count here, the ground is handled by the floor)
+      const d = analytic ? world.openRay(pos, dir, 25, false) : world.rayDistance(pos, dir);
       const limit = 1.6 + sp * 0.12;
-      if (d !== undefined && d < limit && this.bumpCooldown <= 0) {
+      if (d !== undefined && d < limit) {
+        // The wall always stops us; only the penalty/flash is rate-limited.
         // cancel motion toward the obstacle and bounce back a little
         const vn = this.vE * (dir.x * east.x + dir.y * east.y + dir.z * east.z) +
                    this.vN * (dir.x * north.x + dir.y * north.y + dir.z * north.z) +
@@ -281,9 +287,11 @@ export class Flight {
         this.vE -= de * (vn + 2.5);
         this.vN -= dn * (vn + 2.5);
         this.vU -= du * (vn + 2.5);
-        this.bumps++;
-        this.bumpCooldown = 0.7;
-        this.bumpedFlag = true;
+        if (this.bumpCooldown <= 0) {
+          this.bumps++;
+          this.bumpCooldown = 0.7;
+          this.bumpedFlag = true;
+        }
       }
     }
 
