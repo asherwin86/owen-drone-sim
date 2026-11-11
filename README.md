@@ -8,14 +8,21 @@ Built from Owen's concept art (see `concept/concept-art.jpg`): a main menu, a Jo
 
 ## Play
 
-Double-click **`start-game.bat`**. The first run installs everything it needs.
+### The easy way: the .exe
 
-Or from a terminal:
+Double-click **`DroneSim.exe`**. That is the whole game in one file for Windows 10/11: nothing to install, and it needs an internet connection for the map. It is not code-signed, so Windows may show a blue "Windows protected your PC" box the first time. Click **More info → Run anyway**.
+
+The exe is about 115 MB, too big to keep in the Git repo, so get it from the **Releases** page, or build it yourself with `npm install` then `npm run dist` (it appears in `dist/`). It starts in a few seconds because it unpacks itself first.
+
+### From the source code
+
+Double-click **`start-game.bat`** (first run installs everything), or from a terminal:
 
 ```
 npm install
 npm start        # desktop window
 npm run web      # or: play in a browser at http://127.0.0.1:47831
+npm run dist     # build dist/DroneSim.exe (one portable file)
 ```
 
 Needs [Node.js](https://nodejs.org) 20 or newer.
@@ -106,6 +113,7 @@ js/world.js           Cesium globe, map sources, ground/building lookups
 js/terrain.js         free real-world terrain (AWS open data)
 js/buildings.js       free 3D buildings from OpenStreetMap vector tiles
 js/mvt.js             tiny vector-tile decoder
+tools/make-icon.js    draws the app icon (build/icon.png)
 js/droneModel.js      drone 3D model built in code
 js/data.js            drones, job types, landmarks (edit to rebalance!)
 ```

@@ -3,19 +3,58 @@
   "version": "1.0.0",
   "description": "Drone delivery sim on the whole Earth (Electron + CesiumJS)",
   "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "web": "node server.js"
-  },
-  "keywords": [],
-  "author": "",
+  "author": "Owen",
   "license": "ISC",
   "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "web": "node server.js",
+    "icon": "node tools/make-icon.js",
+    "dist": "electron-builder --win portable"
+  },
   "dependencies": {
     "cesium": "^1.147.0",
     "earcut": "^3.2.4"
   },
   "devDependencies": {
-    "electron": "^45.2.3"
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.owen.dronesim",
+    "productName": "Drone Sim",
+    "copyright": "Owen",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "package.json",
+      "main.js",
+      "preload.js",
+      "server.js",
+      "index.html",
+      "css/**/*",
+      "js/**/*",
+      "node_modules/cesium/Build/Cesium/**/*",
+      "node_modules/earcut/src/**/*",
+      "!node_modules/cesium/Build/Cesium/**/*.map"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "DroneSim.exe",
+      "signAndEditExecutable": true
+    },
+    "portable": {
+      "artifactName": "DroneSim.exe"
+    }
   }
 }
