@@ -1,6 +1,7 @@
 # Drone Sim multiplayer relay.
 #
 #   Same network / port-forwarded:   docker compose up -d --build
+#   Permanent address (DuckDNS):     docker compose --profile duckdns up -d   (needs a .env file, see README)
 #   Reachable from ANYWHERE (free):  docker compose --profile tunnel up -d --build
 #                                    docker compose logs tunnel      <- look for  https://something.trycloudflare.com
 #                                    players type  wss://something.trycloudflare.com  in Settings
@@ -23,3 +24,14 @@ services:
     command: tunnel --no-autoupdate --url http://relay:47832
     depends_on:
       - relay
+
+  # Keeps a free yourname.duckdns.org address pointing at this network's public IP.
+  # Needs relay/.env with DUCKDNS_SUBDOMAIN and DUCKDNS_TOKEN (copy .env.example).
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:latest
+    profiles: ["duckdns"]
+    restart: unless-stopped
+    environment:
+      - SUBDOMAINS=${DUCKDNS_SUBDOMAIN:?set DUCKDNS_SUBDOMAIN in .env}
+      - TOKEN=${DUCKDNS_TOKEN:?set DUCKDNS_TOKEN in .env}
+      - LOG_FILE=false

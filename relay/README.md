@@ -50,6 +50,21 @@ The address changes whenever the tunnel container restarts. For a permanent
 address, use a free Cloudflare account + a domain and a named tunnel
 (`cloudflared tunnel run`), or option B/C.
 
+### A2) Permanent address: port forward + DuckDNS (free)
+
+1. Sign in at https://www.duckdns.org (Google/GitHub login), type a name, press **add domain**
+   (say `owendrones` -> `owendrones.duckdns.org`) and copy your **token**.
+2. On the host, in this `relay` folder: copy `.env.example` to `.env` and fill in the name and token.
+3. `docker compose --profile duckdns up -d` (starts the relay AND the DuckDNS updater).
+4. Windows firewall (admin PowerShell):
+   `New-NetFirewallRule -DisplayName "Drone Sim relay" -Direction Inbound -Protocol TCP -LocalPort 47832 -Action Allow`
+5. Router: give the host a fixed LAN IP (DHCP reservation), then forward **TCP 47832 -> that IP:47832**.
+6. Test from another network (phone on mobile data): `http://owendrones.duckdns.org:47832/health`.
+7. Players use `ws://owendrones.duckdns.org:47832` (plain ws, no TLS; the game only sends positions and chat).
+
+If step 6 fails: your router's WAN IP may differ from your public IP (carrier-grade NAT). Then port
+forwarding cannot work; use Tailscale Funnel or a Cloudflare named tunnel instead.
+
 ### B) Tailscale (free, private, great for friends)
 
 Install Tailscale on the host and on each player's computer (same Tailnet, or share
