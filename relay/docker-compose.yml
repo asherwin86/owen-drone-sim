@@ -32,6 +32,6 @@ services:
     profiles: ["duckdns"]
     restart: unless-stopped
     environment:
-      - SUBDOMAINS=${DUCKDNS_SUBDOMAIN:?set DUCKDNS_SUBDOMAIN in .env}
-      - TOKEN=${DUCKDNS_TOKEN:?set DUCKDNS_TOKEN in .env}
+      - SUBDOMAINS=${DUCKDNS_SUBDOMAIN:-}
+      - TOKEN=${DUCKDNS_TOKEN:-}
       - LOG_FILE=false
