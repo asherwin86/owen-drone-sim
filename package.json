@@ -1,6 +1,6 @@
 {
   "name": "owen-drone-sim",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Drone delivery sim on the whole Earth (Electron + CesiumJS)",
   "main": "main.js",
   "author": "Owen",
