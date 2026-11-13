@@ -88,7 +88,7 @@ export const LANDMARKS = [
 
 // Address of the public multiplayer relay (ws://host:port or wss://host), used until a player
 // types a different one in Settings. A player who clears the box turns multiplayer off.
-export const DEFAULT_SERVER = 'wss://armor-identify-katrina-connect.trycloudflare.com';
+export const DEFAULT_SERVER = 'wss://dockerhub.taile01a28.ts.net';
 
 export const DEFAULT_SAVE = {
   version: 1,
