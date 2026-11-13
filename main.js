@@ -2,6 +2,7 @@
 const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const { startServer } = require('./server');
+const { checkForUpdates } = require('./updater');
 
 // Make sure the GPU is used for the 3D world.
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
@@ -38,6 +39,7 @@ async function createWindow() {
   });
   win.maximize();
   win.loadURL(`http://127.0.0.1:${port}/`);
+  win.webContents.once('did-finish-load', () => setTimeout(() => checkForUpdates(win), 4000));
 }
 
 ipcMain.on('quit', () => app.quit());

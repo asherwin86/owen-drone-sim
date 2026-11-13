@@ -14,6 +14,8 @@ Double-click **`DroneSim.exe`**. That is the whole game in one file for Windows 
 
 The exe is about 115 MB, too big to keep in the Git repo, so get it from the **Releases** page, or build it yourself with `npm install` then `npm run dist` (it appears in `dist/`). It starts in a few seconds because it unpacks itself first.
 
+**Auto-updates:** from v1.1.0 on, the game checks GitHub Releases when it starts. If a newer version exists it asks "Update now / Later", downloads `DroneSim.exe`, checks it, swaps itself and restarts. To ship an update: bump `version` in `package.json`, run `npm run dist` on Windows, and publish a GitHub release tagged `v<version>` with `DroneSim.exe` attached.
+
 ### From the source code
 
 Double-click **`start-game.bat`** (first run installs everything), or from a terminal:
