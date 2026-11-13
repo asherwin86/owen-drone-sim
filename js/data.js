@@ -86,9 +86,9 @@ export const LANDMARKS = [
   { name: 'Taj Mahal', place: 'Agra, India', lat: 27.1751, lon: 78.0421 },
 ];
 
-// Address of the public multiplayer relay (ws://host:port or wss://host). Empty = multiplayer off
-// until a player types a server address in Settings.
-export const DEFAULT_SERVER = '';
+// Address of the public multiplayer relay (ws://host:port or wss://host), used until a player
+// types a different one in Settings. A player who clears the box turns multiplayer off.
+export const DEFAULT_SERVER = 'wss://armor-identify-katrina-connect.trycloudflare.com';
 
 export const DEFAULT_SAVE = {
   version: 1,
@@ -99,5 +99,5 @@ export const DEFAULT_SAVE = {
   lon: LANDMARKS[0].lon,
   placeName: LANDMARKS[0].name,
   stats: { jobs: 0, earned: 0, km: 0 },
-  settings: { quality: 'high', volume: 0.5, collisions: true, units: 'kmh', rumble: true, mapSource: 'auto', playerName: '', mpUrl: DEFAULT_SERVER },
+  settings: { quality: 'high', volume: 0.5, collisions: true, units: 'kmh', rumble: true, mapSource: 'auto', playerName: '' },
 };

@@ -1,5 +1,5 @@
 // Drone Sim - main game controller.
-import { DRONES, JOB_TYPES, LANDMARKS, DEFAULT_SAVE, droneRange } from './data.js';
+import { DRONES, JOB_TYPES, LANDMARKS, DEFAULT_SAVE, DEFAULT_SERVER, droneRange } from './data.js';
 import { World } from './world.js';
 import { Flight, Input } from './flight.js';
 import { createDroneModel } from './droneModel.js';
@@ -403,7 +403,7 @@ function openSettings(from) {
   $('#set-rumble').value = s.rumble === false ? 'off' : 'on';
   $('#set-map').value = s.mapSource === 'free' ? 'free' : 'auto';
   $('#set-name').value = s.playerName || '';
-  $('#set-server').value = s.mpUrl || '';
+  $('#set-server').value = s.mpUrl ?? DEFAULT_SERVER;
   $('#settings-note').replaceChildren();
   setMode('settings');
 }
@@ -422,14 +422,14 @@ async function saveSettings() {
   const mapChanged = newMap !== (s.mapSource === 'free' ? 'free' : 'auto');
   s.mapSource = newMap;
   s.rumble = $('#set-rumble').value === 'on';
-  const oldMp = (s.mpUrl || '') + '|' + (s.playerName || '');
+  const oldMp = (s.mpUrl ?? DEFAULT_SERVER) + '|' + (s.playerName || '');
   s.playerName = $('#set-name').value.trim().slice(0, 20);
   s.mpUrl = $('#set-server').value.trim();
   state.input.rumbleOn = s.rumble;
   state.sfx.setVolume(s.volume);
   state.world.applyQuality(s.quality);
   persist();
-  if (oldMp !== (s.mpUrl || '') + '|' + (s.playerName || '')) { const m = mpSettings(); state.mp.start(m.url, m.name); }
+  if (oldMp !== (s.mpUrl ?? DEFAULT_SERVER) + '|' + (s.playerName || '')) { const m = mpSettings(); state.mp.start(m.url, m.name); }
   const note = $('#settings-note');
   note.replaceChildren();
   note.style.color = '';
@@ -745,7 +745,7 @@ function mpSettings() {
   const s = state.save.settings;
   const name = (s.playerName || '').trim() || 'Pilot' + Math.floor(1000 + Math.random() * 9000);
   if (!s.playerName) { s.playerName = name; persist(); }
-  return { url: s.mpUrl || '', name };
+  return { url: s.mpUrl ?? DEFAULT_SERVER, name };
 }
 
 function updateChatVisibility() {
