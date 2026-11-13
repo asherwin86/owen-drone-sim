@@ -5,6 +5,8 @@ import { Flight, Input } from './flight.js';
 import { createDroneModel } from './droneModel.js';
 import { Sfx } from './audio.js';
 import { PadNav } from './gamepad.js';
+import { loadPlaces, pickJobPlaces, placeLabel } from './places.js';
+import { Multiplayer } from './multiplayer.js';
 import { destination, distanceM, bearingRad, clamp, formatDist, formatMoney, formatTime } from './geo.js';
 
 const Cesium = window.Cesium;
@@ -22,6 +24,9 @@ const state = {
   tab: 'jobs',
   cat: 'food',
   jobs: [],
+  jobsStatus: 'loading', // loading | ready | empty | error
+  mp: null,
+  chat: [],
   models: {},
   focus: { lat: 48.8584, lon: 2.2945, h: 40 },
   orbitHeading: 0.6,
@@ -103,6 +108,7 @@ function setMode(mode, screen) {
   state.input.clearPresses(); // don't carry old button presses into the next screen
   state.input.capture = mode === 'flying';
   showScreen(screen || (mode === 'flying' ? '' : mode));
+  if (state.mp) updateChatVisibility();
 }
 
 function updateWorldStatus() {
@@ -133,37 +139,64 @@ function orbit(dt) {
 }
 
 // ------------------------------------------------------------ jobs
-function makeJob(type, drone, range) {
-  const { lat, lon } = state.save;
+// Jobs use REAL places from OpenStreetMap: shops/restaurants/clinics to pick up from,
+// and real street addresses (or hospitals, depots) to deliver to.
+function makeJob(type, drone, range, places, used) {
+  const maxRoute = 0.68 * range;
+  const found = pickJobPlaces(places, type.id, state.save, {
+    minDist: type.minDist, maxDist: Math.min(type.maxDist, maxRoute), maxPick: clamp(0.3 * range, 600, 2500), maxRoute,
+  }, used);
+  if (!found) return null;
+  used.add(found.pickup); used.add(found.drop);
   const cargo = Math.round(rnd(type.cargo[0], type.cargo[1]) * 10) / 10;
-  let dPick = clamp(rnd(150, 0.12 * range), 150, 800);
-  let dDel = clamp(rnd(type.dist[0], type.dist[1]) * range, type.minDist, type.maxDist);
-  if (dPick + dDel > 0.68 * range) dDel = Math.max(200, 0.68 * range - dPick);
-  const b1 = rnd(0, Math.PI * 2);
-  const pickup = destination(lat, lon, b1, dPick);
-  const drop = destination(pickup.lat, pickup.lon, rnd(0, Math.PI * 2), dDel);
+  const { dPick, dDel } = found;
   const route = dPick + dDel;
   const avg = drone.maxSpeed * type.speedMul;
   const timeLimit = Math.round((route / avg + 30) / 5) * 5;
-  const pickName = pick(type.pickups);
-  const dropName = pick(type.dropoffs);
+  const pk = found.pickup, dr = found.drop;
   return {
     id: Math.random().toString(36).slice(2),
     type: type.id,
     cargo, dPick, dDel, timeLimit,
     pay: round5(type.base + type.rate * dDel),
-    pickup: { ...pickup, name: pickName },
-    drop: { ...drop, name: dropName },
+    pickup: { lat: pk.lat, lon: pk.lon, name: placeLabel(pk, false), addr: pk.addr },
+    drop: { lat: dr.lat, lon: dr.lon, name: placeLabel(dr, found.homeLabel), addr: dr.addr },
     locked: cargo > drone.cargo,
   };
 }
 
-function genJobs() {
+let jobsToken = 0;
+async function genJobs() {
+  const token = ++jobsToken;
   const drone = currentDrone();
   const range = droneRange(drone);
-  const jobs = [];
-  for (const type of JOB_TYPES) for (let i = 0; i < 3; i++) jobs.push(makeJob(type, drone, range));
-  state.jobs = jobs;
+  const { lat, lon } = state.save;
+  state.jobs = [];
+  state.jobsStatus = 'loading';
+  refreshJobsView();
+  try {
+    const places = await loadPlaces(lat, lon, clamp(0.68 * range, 1500, 5000));
+    if (token !== jobsToken) return;
+    const used = new Set();
+    const jobs = [];
+    for (const type of JOB_TYPES) {
+      for (let i = 0; i < 3; i++) {
+        const j = makeJob(type, drone, range, places, used);
+        if (j) jobs.push(j);
+      }
+    }
+    state.jobs = jobs;
+    state.jobsStatus = jobs.length ? 'ready' : 'empty';
+  } catch (e) {
+    if (token !== jobsToken) return;
+    console.warn('Could not load real places', e);
+    state.jobsStatus = 'error';
+  }
+  refreshJobsView();
+}
+
+function refreshJobsView() {
+  if (state.mode === 'hub' && state.tab === 'jobs') renderJobs();
 }
 
 // ------------------------------------------------------------ hub UI
@@ -189,7 +222,7 @@ function refreshHubHeader() {
 function showTab(tab) {
   state.tab = tab;
   document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-  for (const t of ['jobs', 'drones', 'world']) $('#tab-' + t).classList.toggle('hidden', t !== tab);
+  for (const t of ['jobs', 'drones', 'world', 'online']) $('#tab-' + t).classList.toggle('hidden', t !== tab);
   renderTab();
 }
 
@@ -197,6 +230,7 @@ function renderTab() {
   refreshHubHeader();
   if (state.tab === 'jobs') renderJobs();
   else if (state.tab === 'drones') renderDrones();
+  else if (state.tab === 'online') renderOnlineTab();
   else renderWorldTab();
 }
 
@@ -212,11 +246,29 @@ function renderJobs() {
       onclick: () => { state.sfx.click(); state.cat = t.id; renderJobs(); },
     }, `${t.icon} ${t.name}`, lockedAll ? el('span', { class: 'lock' }, ' 🔒') : null));
   }
-  chips.append(el('button', { class: 'btn small', onclick: () => { state.sfx.click(); genJobs(); renderJobs(); } }, '↻ New jobs'));
+  chips.append(el('button', { class: 'btn small', onclick: () => { state.sfx.click(); genJobs(); } }, '↻ New jobs'));
   root.append(chips);
 
   const type = JOB_TYPES.find((t) => t.id === state.cat);
-  for (const job of state.jobs.filter((j) => j.type === type.id)) {
+  if (state.jobsStatus === 'loading') {
+    root.append(el('div', { class: 'muted note' }, '🗺 Finding real shops and addresses near ' + state.save.placeName + '…'));
+    return;
+  }
+  if (state.jobsStatus === 'error') {
+    root.append(el('div', { class: 'muted note' }, '⚠ Could not reach OpenStreetMap to find real addresses. Check your internet, then try again. ',
+      el('button', { class: 'btn small', onclick: () => genJobs() }, 'Try again')));
+    return;
+  }
+  if (state.jobsStatus === 'empty') {
+    root.append(el('div', { class: 'muted note' }, 'No mapped shops or addresses found here (open sea or wilderness?). Pick a town or city in the World tab.'));
+    return;
+  }
+  const typeJobs = state.jobs.filter((j) => j.type === type.id);
+  if (!typeJobs.length) {
+    root.append(el('div', { class: 'muted note' }, `No ${type.name.toLowerCase()} places mapped near here. Try another category or move in the World tab.`));
+    return;
+  }
+  for (const job of typeJobs) {
     const btn = el('button', {
       class: 'btn primary', disabled: job.locked,
       onclick: () => { state.sfx.click(); startFlight(job); },
@@ -226,6 +278,7 @@ function renderJobs() {
       el('div', { class: 'info' },
         el('div', { class: 'name' }, `${job.pickup.name} → ${job.drop.name}`),
         el('div', { class: 'sub' }, job.locked ? `Needs a drone that can carry ${job.cargo} kg` : `Carry ${job.cargo} kg across ${formatDist(job.dDel)}`),
+        el('div', { class: 'addr' }, [job.pickup.addr && '📍 ' + job.pickup.addr, job.drop.addr && '🏠 ' + job.drop.addr].filter(Boolean).join('   →   ')),
         el('div', { class: 'meta' },
           el('span', {}, `📏 ${formatDist(job.dPick + job.dDel)} total`),
           el('span', {}, `⏱ ${formatTime(job.timeLimit)}`),
@@ -349,6 +402,8 @@ function openSettings(from) {
   $('#set-collide').value = s.collisions ? 'on' : 'off';
   $('#set-rumble').value = s.rumble === false ? 'off' : 'on';
   $('#set-map').value = s.mapSource === 'free' ? 'free' : 'auto';
+  $('#set-name').value = s.playerName || '';
+  $('#set-server').value = s.mpUrl || '';
   $('#settings-note').replaceChildren();
   setMode('settings');
 }
@@ -367,10 +422,14 @@ async function saveSettings() {
   const mapChanged = newMap !== (s.mapSource === 'free' ? 'free' : 'auto');
   s.mapSource = newMap;
   s.rumble = $('#set-rumble').value === 'on';
+  const oldMp = (s.mpUrl || '') + '|' + (s.playerName || '');
+  s.playerName = $('#set-name').value.trim().slice(0, 20);
+  s.mpUrl = $('#set-server').value.trim();
   state.input.rumbleOn = s.rumble;
   state.sfx.setVolume(s.volume);
   state.world.applyQuality(s.quality);
   persist();
+  if (oldMp !== (s.mpUrl || '') + '|' + (s.playerName || '')) { const m = mpSettings(); state.mp.start(m.url, m.name); }
   const note = $('#settings-note');
   note.replaceChildren();
   note.style.color = '';
@@ -503,7 +562,7 @@ async function startFlight(job) {
   const spawnGround = Math.max(...hs.slice(0, 5));
   const model = await getModel(drone);
   for (const m of Object.values(state.models)) m.model.show = m === model;
-  state.world.excluded = [model.model];
+  state.world.excluded = [model.model, ...state.mp.excludedObjects()];
 
   const yaw = job ? bearingRad(lat, lon, job.pickup.lat, job.pickup.lon) : state.orbitHeading;
   const f = state.flight;
@@ -529,6 +588,7 @@ async function startFlight(job) {
     state.run.legLen = Math.max(50, distanceM(lat, lon, job.pickup.lat, job.pickup.lon));
   }
   setupHudForRun();
+  syncMp(true);
   setMode('flying', '');
   $('#hud').classList.remove('hidden');
   $('#hud-help').style.opacity = 1;
@@ -569,6 +629,7 @@ function updateJobHud() {
   $('#route-b').textContent = pickingUp ? type.icon : '🏠';
   $('#route-a').classList.toggle('done', !pickingUp);
   $('#marker-icon').textContent = pickingUp ? type.icon : '🏠';
+  syncMp(true);
 }
 
 function currentTarget() {
@@ -579,6 +640,7 @@ function currentTarget() {
 
 function endFlightCleanup() {
   const f = state.flight;
+  syncMp(false);
   state.sfx.rotor(false, 0);
   clearBeacons();
   if (f.active) {
@@ -672,6 +734,98 @@ function resumeGame() {
   state.input.clearPresses();
 }
 
+// ------------------------------------------------------------ multiplayer + chat
+function syncMp(flying) {
+  const run = state.run;
+  const job = flying && run && run.job ? { type: run.job.type, stage: run.stage, pickup: run.job.pickup, drop: run.job.drop } : null;
+  state.mp.setMyState({ fly: flying, drone: state.save.drone, job });
+}
+
+function mpSettings() {
+  const s = state.save.settings;
+  const name = (s.playerName || '').trim() || 'Pilot' + Math.floor(1000 + Math.random() * 9000);
+  if (!s.playerName) { s.playerName = name; persist(); }
+  return { url: s.mpUrl || '', name };
+}
+
+function updateChatVisibility() {
+  const online = state.mp && state.mp.status === 'online';
+  const show = online && ['hub', 'flying', 'paused'].includes(state.mode);
+  $('#chat').classList.toggle('hidden', !show);
+}
+
+function addChat(msg, quiet) {
+  state.chat.push(msg);
+  if (state.chat.length > 60) state.chat.shift();
+  const log = $('#chat-log');
+  const line = el('div', { class: 'chat-line' + (msg.system ? ' sys' : '') });
+  if (msg.system) line.append(msg.text);
+  else line.append(el('b', {}, msg.name + ': '), msg.text);
+  log.append(line);
+  while (log.children.length > 60) log.firstChild.remove();
+  log.scrollTop = log.scrollHeight;
+  if (!quiet) {
+    line.classList.add('fresh');
+    setTimeout(() => line.classList.remove('fresh'), 9000);
+  }
+}
+
+function openChat() {
+  if (!state.mp || state.mp.status !== 'online') return;
+  $('#chat').classList.add('typing');
+  const input = $('#chat-input');
+  input.value = '';
+  input.focus();
+}
+
+function closeChat() {
+  $('#chat').classList.remove('typing');
+  $('#chat-input').blur();
+}
+
+function bindChat() {
+  const input = $('#chat-input');
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      const text = input.value.trim();
+      if (text) state.mp.sendChat(text);
+      input.value = '';
+      if (state.mode === 'flying') closeChat();
+    } else if (e.key === 'Escape') {
+      closeChat();
+    }
+  });
+  input.addEventListener('focus', () => { if (state.mode === 'flying') state.input.keys.clear(); });
+}
+
+function renderOnlineTab() {
+  const root = $('#tab-online');
+  root.replaceChildren();
+  const mp = state.mp;
+  if (!mp || mp.status === 'off') {
+    root.append(el('div', { class: 'muted note' }, 'Multiplayer is off. Open Settings, type the multiplayer server address and your pilot name, then press Save.'));
+    return;
+  }
+  if (mp.status !== 'online') {
+    root.append(el('div', { class: 'muted note' }, mp.status === 'connecting' ? 'Connecting…' : '⚠ Could not reach the multiplayer server. Retrying…'));
+    return;
+  }
+  root.append(el('div', { class: 'muted note' }, `🌐 ${mp.online} pilot${mp.online === 1 ? '' : 's'} online (including you). Press Enter while flying to chat.`));
+  const list = mp.roster();
+  if (!list.length) root.append(el('div', { class: 'muted note' }, 'Nobody else is here yet.'));
+  for (const p of list) {
+    const j = p.job;
+    const type = j && JOB_TYPES.find((t) => t.id === j.ty);
+    const doing = !p.fly ? 'In the hub' : j ? `${type ? type.icon : '📦'} ${j.st === 'pickup' ? 'Heading to ' + (j.pk[2] || 'a pickup') : 'Delivering to ' + (j.dr[3] || j.dr[2] || 'an address')}` : '🕊 Free flying';
+    const drone = DRONES.find((d) => d.id === p.drone);
+    root.append(el('div', { class: 'card' },
+      el('div', { class: 'icon' }, '🚁'),
+      el('div', { class: 'info' }, el('div', { class: 'name' }, p.name), el('div', { class: 'sub' }, doing), el('div', { class: 'meta' }, el('span', {}, drone ? drone.name : ''))),
+      p.fly && p.cur ? el('div', { class: 'right' }, el('button', { class: 'btn small', onclick: () => { goTo(p.cur.lat, p.cur.lon, p.name + "'s area"); } }, 'Go there')) : null));
+  }
+}
+
 // ------------------------------------------------------------ per-frame
 const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
@@ -687,6 +841,8 @@ function stepFlying(dt) {
 
   f.update(dt, input.axes());
   f.render(dt);
+  state.mp.sendPosition(f, dt);
+  if (input.consume('Enter')) openChat();
   state.world.updateOpen(f.latDeg, f.lonDeg);
   state.sfx.rotor(f.rotorOn, f.load || 0);
 
@@ -826,7 +982,7 @@ function updateMarker(t, dist2d) {
 
 // What the controller can do on the current menu screen.
 function cycleTab(d) {
-  const tabs = ['jobs', 'drones', 'world'];
+  const tabs = ['jobs', 'drones', 'world', 'online'];
   const i = (tabs.indexOf(state.tab) + d + tabs.length) % tabs.length;
   state.sfx.click();
   showTab(tabs[i]);
@@ -865,6 +1021,10 @@ function onPreRender() {
     }
   } catch (e) {
     console.error('Frame error', e);
+  }
+  if (state.mp) {
+    const here = state.mode === 'flying' && state.flight.active ? { lat: state.flight.latDeg, lon: state.flight.lonDeg } : state.focus;
+    try { state.mp.update(dt, here.lat, here.lon, now / 40); } catch (e) { console.error('mp', e); }
   }
   if (state.input.consume('F11') && window.droneApp) window.droneApp.toggleFullscreen();
   if (state.mode !== 'flying') state.input.pressed.delete('Escape');
@@ -935,6 +1095,20 @@ async function boot() {
     return;
   }
   state.flight = new Flight(state.world);
+  state.mp = new Multiplayer({
+    world: state.world,
+    specOf: (id) => DRONES.find((d) => d.id === id) || DRONES[0],
+    onChat: addChat,
+    onStatus: (text, ok) => {
+      $('#mp-status').textContent = text;
+      $('#mp-status').classList.toggle('good', ok);
+      updateChatVisibility();
+      if (state.mode === 'hub' && state.tab === 'online') renderOnlineTab();
+    },
+    onRoster: () => { if (state.mode === 'hub' && state.tab === 'online') renderOnlineTab(); },
+  });
+  bindChat();
+  { const m = mpSettings(); state.mp.myDrone = state.save.drone; state.mp.start(m.url, m.name); }
   state.focus = { lat: state.save.lat, lon: state.save.lon, h: 40 };
   setFocus(state.save.lat, state.save.lon);
   genJobs();

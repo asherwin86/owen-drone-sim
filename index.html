@@ -31,6 +31,7 @@
           <button class="btn big danger" data-action="quit">✕ Quit</button>
         </div>
         <div id="world-status" class="chip"></div>
+        <div id="mp-status" class="chip">Multiplayer off</div>
       </div>
     </section>
 
@@ -48,11 +49,13 @@
         <button class="tab" data-tab="jobs">💼 Jobs</button>
         <button class="tab" data-tab="drones">🚁 Drones</button>
         <button class="tab" data-tab="world">🌍 World</button>
+        <button class="tab" data-tab="online">🌐 Online</button>
       </nav>
       <main class="hub-body">
         <div id="tab-jobs" class="tabpane"></div>
         <div id="tab-drones" class="tabpane hidden"></div>
         <div id="tab-world" class="tabpane hidden"></div>
+        <div id="tab-online" class="tabpane hidden"></div>
       </main>
       <footer class="hub-foot">
         <span id="hub-place" class="muted"></span>
@@ -102,6 +105,16 @@
           <div class="field">
             <label for="set-map">Map <small>(needs a restart)</small></label>
             <select id="set-map"><option value="auto">Best available</option><option value="free">Free 3D world only</option></select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="set-name">Pilot name <small>(shown to other players)</small></label>
+            <input id="set-name" type="text" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Your name" />
+          </div>
+          <div class="field">
+            <label for="set-server">Multiplayer server <small>(blank = off)</small></label>
+            <input id="set-server" type="text" autocomplete="off" spellcheck="false" placeholder="ws://127.0.0.1:47832" />
           </div>
         </div>
         <p id="settings-note" class="muted"></p>
@@ -177,6 +190,11 @@
     </section>
 
     <div id="gp-hint"><kbd>A</kbd> Select &nbsp; <kbd>B</kbd> Back &nbsp; <kbd>LB</kbd><kbd>RB</kbd> Tabs &nbsp; <kbd>D-pad</kbd> Move</div>
+    <div id="chat" class="hidden">
+      <div id="chat-log"></div>
+      <input id="chat-input" type="text" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Type a message, Enter to send" />
+      <div id="chat-hint">Press <kbd>Enter</kbd> to chat</div>
+    </div>
     <div id="toasts"></div>
   </div>
 

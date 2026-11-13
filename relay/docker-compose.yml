@@ -1,0 +1,25 @@
+# Drone Sim multiplayer relay.
+#
+#   Same network / port-forwarded:   docker compose up -d --build
+#   Reachable from ANYWHERE (free):  docker compose --profile tunnel up -d --build
+#                                    docker compose logs tunnel      <- look for  https://something.trycloudflare.com
+#                                    players type  wss://something.trycloudflare.com  in Settings
+#
+# The tunnel needs no router changes and no account. Its address changes each time
+# the tunnel container restarts (see README for a permanent address).
+services:
+  relay:
+    # Pulls the published image; to build from this folder instead run: docker compose up -d --build
+    build: .
+    image: ghcr.io/asherwin86/drone-sim-relay:${RELAY_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "47832:47832"
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://relay:47832
+    depends_on:
+      - relay

@@ -1,0 +1,10 @@
+{
+  "name": "drone-sim-relay",
+  "version": "1.0.0",
+  "description": "Multiplayer relay server for Drone Sim",
+  "main": "server.js",
+  "private": true,
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "ws": "^8.18.0" },
+  "license": "ISC"
+}

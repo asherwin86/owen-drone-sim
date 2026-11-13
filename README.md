@@ -125,3 +125,7 @@ Progress is saved to `%USERPROFILE%\DroneSim\save.json`.
 ## Credits
 
 Map data © Google / Cesium / Esri depending on the map source in use. The attribution is shown in the bottom-left corner of the game and must be kept visible.
+
+## Multiplayer
+
+See [relay/README.md](relay/README.md). Run the relay in Docker (image: `ghcr.io/asherwin86/drone-sim-relay`), then each player enters its address under Settings -> Multiplayer server. Jobs now use real shops and street addresses from OpenStreetMap.

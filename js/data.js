@@ -1,4 +1,4 @@
-// Game data: drones, job types, landmarks, name lists.
+// Game data: drones, job types, landmarks. (Pickup and drop-off places are real ones from OpenStreetMap: see places.js.)
 
 export const DRONES = [
   {
@@ -49,33 +49,25 @@ export const JOB_TYPES = [
     id: 'food', name: 'Food Delivery', icon: '🍔', color: '#ff8a3d',
     cargo: [0.4, 1.0], dist: [0.18, 0.4], maxDist: 3000, minDist: 300,
     rate: 0.085, base: 25, speedMul: 0.6,
-    pickups: ["Luigi's Pizza", 'Burger Barn', 'Sushi Sunrise', 'Taco Town', 'Noodle House', 'Golden Fries', 'Pasta Palace', 'Curry Corner', 'Donut Dreams', 'Wing Kingdom'],
     pickupNoun: 'food',
-    dropoffs: ['Mia', 'Jack', 'Sam', 'Lily', 'Noah', 'Ava', 'Leo', 'Zoe', 'Max', 'Ruby'],
   },
   {
     id: 'parcel', name: 'Parcels', icon: '📦', color: '#c8a26b',
     cargo: [1.5, 5], dist: [0.25, 0.5], maxDist: 6000, minDist: 500,
     rate: 0.11, base: 60, speedMul: 0.6,
-    pickups: ['Post Depot', 'Toy Shop', 'Book Nook', 'Gadget Garage', 'Game Store', 'Craft Corner'],
     pickupNoun: 'parcel',
-    dropoffs: ['Mrs. Chen', 'Mr. Ortiz', 'Grandpa Joe', 'Aunt Priya', 'Coach Dana', 'Ms. Okafor'],
   },
   {
     id: 'medical', name: 'Medical Rush', icon: '💊', color: '#ff4f6d',
     cargo: [0.5, 4], dist: [0.3, 0.55], maxDist: 9000, minDist: 800,
     rate: 0.22, base: 120, speedMul: 0.78,
-    pickups: ['City Pharmacy', 'Green Cross Clinic', 'Blood Bank', 'Care Lab'],
     pickupNoun: 'medicine',
-    dropoffs: ['Hilltop Hospital', 'Dr. Kim', 'Riverside Clinic', 'Nurse Amara'],
   },
   {
     id: 'freight', name: 'Heavy Freight', icon: '🏗️', color: '#6aa6ff',
     cargo: [8, 26], dist: [0.3, 0.55], maxDist: 12000, minDist: 1500,
     rate: 0.2, base: 300, speedMul: 0.6,
-    pickups: ['Harbor Warehouse', 'Steel Yard', 'Cargo Hub', 'Builder Supply'],
     pickupNoun: 'freight',
-    dropoffs: ['Site 7', 'North Depot', 'Tower Works', 'Dockside Crane'],
   },
 ];
 
@@ -94,6 +86,10 @@ export const LANDMARKS = [
   { name: 'Taj Mahal', place: 'Agra, India', lat: 27.1751, lon: 78.0421 },
 ];
 
+// Address of the public multiplayer relay (ws://host:port or wss://host). Empty = multiplayer off
+// until a player types a server address in Settings.
+export const DEFAULT_SERVER = '';
+
 export const DEFAULT_SAVE = {
   version: 1,
   money: 0,
@@ -103,5 +99,5 @@ export const DEFAULT_SAVE = {
   lon: LANDMARKS[0].lon,
   placeName: LANDMARKS[0].name,
   stats: { jobs: 0, earned: 0, km: 0 },
-  settings: { quality: 'high', volume: 0.5, collisions: true, units: 'kmh', rumble: true, mapSource: 'auto' },
+  settings: { quality: 'high', volume: 0.5, collisions: true, units: 'kmh', rumble: true, mapSource: 'auto', playerName: '', mpUrl: DEFAULT_SERVER },
 };

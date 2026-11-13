@@ -160,3 +160,22 @@ body.gp-active .btn:focus, body.gp-active .tab:focus, body.gp-active .cat:focus,
 .result td { padding: 6px 0; font-size: 18px; }
 .result td:last-child { text-align: right; font-weight: 800; }
 .result tr.total td { border-top: 2px solid var(--line); font-size: 26px; color: var(--green); padding-top: 10px; }
+
+/* addresses + notes */
+.addr { font-size: 12px; color: var(--muted); margin: 2px 0 4px; }
+.note { padding: 18px 6px; font-size: 15px; line-height: 1.6; }
+
+/* multiplayer chat */
+#chat { position: absolute; left: 18px; bottom: 130px; width: min(380px, 40vw); display: flex; flex-direction: column; gap: 6px; z-index: 20; }
+#chat-log { max-height: 170px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; scrollbar-width: thin; }
+.chat-line { background: rgba(8,12,24,.72); border-radius: 10px; padding: 4px 10px; font-size: 14px; line-height: 1.35; word-break: break-word; user-select: text; }
+.chat-line b { color: var(--cyan); }
+.chat-line.sys { color: var(--muted); font-size: 12px; font-style: italic; }
+#chat-input { font: inherit; font-size: 14px; color: var(--text); background: rgba(8,12,24,.88); border: 2px solid var(--cyan); border-radius: 10px; padding: 8px 12px; outline: none; user-select: text; }
+#chat-hint { font-size: 11px; color: var(--muted); display: none; }
+body.flying #chat-input { display: none; }
+body.flying #chat.typing #chat-input { display: block; }
+body.flying #chat-hint { display: block; }
+body.flying #chat:not(.typing) .chat-line:not(.fresh) { display: none; }
+body.flying #chat.typing .chat-line { display: block; }
+body:not(.flying) #chat { bottom: 70px; }
